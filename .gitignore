@@ -1,0 +1,19 @@
+# Python caches
+__pycache__/
+*.py[cod]
+
+# Datasets (do not commit)
+raw-img/
+raw-images/
+dataset/
+
+# Environment / Secrets — NEVER commit this
+.env
+
+# Node / Vite
+frontend/node_modules/
+frontend/dist/
+
+# OS junk
+.DS_Store
+Thumbs.db
