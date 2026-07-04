@@ -395,7 +395,8 @@ async def api_chat(
         )
         messages = [{"role": "system", "content": system}]
         for turn in history[-6:]:
-            messages.append({"role": turn["role"] if turn["role"] in ["user", "assistant"] else "user", "content": turn["content"]})
+            content_val = turn.get("text", turn.get("content", ""))
+            messages.append({"role": turn["role"] if turn.get("role") in ["user", "assistant"] else "user", "content": content_val})
         messages.append({"role": "user", "content": message})
 
         response_text = gemini_generate(messages) or "I'm having trouble responding right now. Please try again."
