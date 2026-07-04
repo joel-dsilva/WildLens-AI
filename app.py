@@ -3,6 +3,7 @@ import time
 import json
 import io
 import uuid
+import base64
 import torch
 import torchvision.models as models
 import torchvision.transforms as transforms
@@ -14,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types as genai_types
 from supabase import create_client, Client
 
 # ==========================================
@@ -73,10 +75,105 @@ app.add_middleware(
 )
 
 # ==========================================
-# 4. CNN Classifier ? MobileNetV3 + Animals-10
+# ==========================================
+# 4. Gemini GenAI - Auto-loaded from .env
+# ==========================================
+_gemini_client = None
+
+def get_gemini_client():
+    global _gemini_client
+    if not GEMINI_API_KEY:
+        return None
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+        print("[OK] Gemini client initialised from environment.")
+    return _gemini_client
+
+QUOTA_MSG = "The AI assistant is currently busy. Please wait a moment and try again."
+
+def gemini_generate(prompt: str) -> str | None:
+    client = get_gemini_client()
+    if not client:
+        return None
+    try:
+        resp = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        return resp.text
+    except Exception as e:
+        err = str(e).lower()
+        if "quota" in err or "429" in err or "exhausted" in err or "resource" in err:
+            return QUOTA_MSG
+        raise
+
+def classify_image_gemini(image_bytes: bytes) -> dict:
+    """Use Gemini Vision to identify any animal species in the image."""
+    t0 = time.time()
+    client = get_gemini_client()
+
+    if not client:
+        # Fallback: use local CNN if Gemini not available
+        return classify_image_cnn(image_bytes)
+
+    try:
+        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        # Detect MIME type
+        img_obj = Image.open(io.BytesIO(image_bytes))
+        fmt = img_obj.format or "JPEG"
+        mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp", "GIF": "image/gif"}
+        mime_type = mime_map.get(fmt.upper(), "image/jpeg")
+
+        prompt = (
+            "You are a professional wildlife biologist. Look at this image carefully.\n"
+            "Identify the primary animal species visible.\n"
+            "Respond ONLY with valid JSON in this exact format (no markdown, no extra text):\n"
+            '{"species": "<common name of the animal>", "scientific_name": "<scientific name>", '
+            '"confidence": <integer 0-100>, "description": "<one sentence about this animal>"}\n'
+            "If no animal is visible, set species to \"No Animal Detected\" and confidence to 0."
+        )
+
+        resp = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=[
+                genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                prompt
+            ]
+        )
+        raw = resp.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        data = json.loads(raw)
+        total_ms = round((time.time() - t0) * 1000, 2)
+        return {
+            "species":         data.get("species", "Unknown"),
+            "scientific_name": data.get("scientific_name", ""),
+            "confidence":      data.get("confidence", 0),
+            "description":     data.get("description", ""),
+            "model_type":      "gemini_vision",
+            "latency": {
+                "preprocessing": 0,
+                "inference": total_ms,
+                "postprocessing": 0,
+                "total": total_ms,
+            }
+        }
+    except Exception as e:
+        err = str(e).lower()
+        if "quota" in err or "429" in err or "exhausted" in err or "resource" in err:
+            return {
+                "species": "Quota Exceeded",
+                "scientific_name": "",
+                "confidence": 0,
+                "description": "API quota limit reached. Please try again in a moment.",
+                "model_type": "gemini_vision",
+                "latency": {"preprocessing": 0, "inference": 0, "postprocessing": 0, "total": 0},
+                "error": "quota_exceeded"
+            }
+        # Fallback to CNN
+        return classify_image_cnn(image_bytes)
+
+
+# ==========================================
+# 5. CNN Fallback - MobileNetV3 + Animals-10
 # ==========================================
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"? Compute device: {device}")
+print(f"[INFO] Compute device: {device}")
 
 ANIMALS_10 = ["Dog", "Horse", "Elephant", "Butterfly", "Chicken",
                "Cat", "Cow", "Sheep", "Squirrel", "Spider"]
@@ -87,51 +184,27 @@ ITALIAN_TO_ENGLISH = {
     "mucca": "Cow", "pecora": "Sheep", "ragno": "Spider", "scoiattolo": "Squirrel"
 }
 
-IMAGENET_TO_ANIMALS10 = {
-    "dog": "Dog", "terrier": "Dog", "retriever": "Dog", "spaniel": "Dog",
-    "hound": "Dog", "collie": "Dog", "poodle": "Dog", "pug": "Dog",
-    "horse": "Horse", "sorrel": "Horse", "zebra": "Horse",
-    "elephant": "Elephant",
-    "butterfly": "Butterfly", "monarch": "Butterfly",
-    "chicken": "Chicken", "hen": "Chicken", "cock": "Chicken", "rooster": "Chicken",
-    "cat": "Cat", "tabby": "Cat", "siamese": "Cat", "persian": "Cat",
-    "cow": "Cow", "bull": "Cow", "ox": "Cow",
-    "sheep": "Sheep", "ram": "Sheep", "lamb": "Sheep",
-    "squirrel": "Squirrel", "chipmunk": "Squirrel",
-    "spider": "Spider", "tarantula": "Spider"
-}
-
 CUSTOM_MODEL_PATH = "animals10_model.pth"
 has_custom_model  = os.path.exists(CUSTOM_MODEL_PATH)
 custom_classes    = ANIMALS_10
-model             = None
+cnn_model         = None
 
 if has_custom_model:
     try:
-        print("? Loading custom-trained Animals-10 weights...")
-        checkpoint    = torch.load(CUSTOM_MODEL_PATH, map_location=device, weights_only=False)
-        raw_classes   = checkpoint.get("classes", ANIMALS_10)
-        # Translate Italian class names to English
+        print("[INFO] Loading custom-trained Animals-10 weights...")
+        checkpoint     = torch.load(CUSTOM_MODEL_PATH, map_location=device, weights_only=False)
+        raw_classes    = checkpoint.get("classes", ANIMALS_10)
         custom_classes = [ITALIAN_TO_ENGLISH.get(c.lower(), c.capitalize()) for c in raw_classes]
-        model = models.mobilenet_v3_large()
-        in_features = model.classifier[3].in_features
-        model.classifier[3] = torch.nn.Linear(in_features, len(custom_classes))
-        model.load_state_dict(checkpoint["model_state"])
-        model.eval()
-        model.to(device)
-        print(f"? Custom model loaded. Classes: {custom_classes}")
+        cnn_model = models.mobilenet_v3_large()
+        in_features = cnn_model.classifier[3].in_features
+        cnn_model.classifier[3] = torch.nn.Linear(in_features, len(custom_classes))
+        cnn_model.load_state_dict(checkpoint["model_state"])
+        cnn_model.eval()
+        cnn_model.to(device)
+        print(f"[OK] Custom model loaded. Classes: {custom_classes}")
     except Exception as e:
-        print(f"??  Custom model load failed: {e}. Falling back to ImageNet backbone.")
+        print(f"[WARN] Custom model load failed: {e}. CNN fallback disabled.")
         has_custom_model = False
-
-if not has_custom_model:
-    print("? Loading ImageNet pre-trained MobileNetV3...")
-    _weights = models.MobileNet_V3_Large_Weights.DEFAULT
-    model    = models.mobilenet_v3_large(weights=_weights)
-    model.eval()
-    model.to(device)
-    imagenet_categories = _weights.meta["categories"]
-    print("? ImageNet backbone ready.")
 
 preprocess = transforms.Compose([
     transforms.Resize(256),
@@ -140,75 +213,35 @@ preprocess = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-def classify_image(image_bytes: bytes) -> dict:
-    t0 = time.time()
+def classify_image_cnn(image_bytes: bytes) -> dict:
+    """Fallback CNN classifier for the 10 training classes."""
+    t0  = time.time()
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-    img    = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    tensor = preprocess(img).unsqueeze(0).to(device)
-    t_prep = (time.time() - t0) * 1000
-
-    t1 = time.time()
-    with torch.no_grad():
-        out   = model(tensor)
-        probs = torch.nn.functional.softmax(out[0], dim=0)
-    t_infer = (time.time() - t1) * 1000
-
-    t2 = time.time()
-    if has_custom_model:
-        top_prob, top_idx = torch.topk(probs, 1)
-        species    = custom_classes[top_idx[0].item()]
-        confidence = top_prob[0].item()
-    else:
-        top5_probs, top5_ids = torch.topk(probs, 5)
-        species    = "Unknown"
-        confidence = 0.0
-        for i in range(5):
-            name = imagenet_categories[top5_ids[i]].lower()
-            prob = top5_probs[i].item()
-            for kw, sp in IMAGENET_TO_ANIMALS10.items():
-                if kw in name:
-                    species    = sp
-                    confidence = prob
-                    break
-            if species != "Unknown":
-                break
-        if species == "Unknown":
-            species    = "Butterfly"
-            confidence = 0.42
-    t_post = (time.time() - t2) * 1000
-
-    return {
-        "species":    species,
-        "confidence": round(confidence * 100, 2),
-        "model_type": "custom_trained" if has_custom_model else "imagenet_backbone",
-        "latency": {
-            "preprocessing":   round(t_prep, 2),
-            "inference":       round(t_infer, 2),
-            "postprocessing":  round(t_post, 2),
-            "total":           round((time.time() - t0) * 1000, 2),
+    if cnn_model is None:
+        return {
+            "species": "Unknown", "scientific_name": "", "confidence": 0,
+            "description": "No model available.", "model_type": "none",
+            "latency": {"preprocessing": 0, "inference": 0, "postprocessing": 0, "total": 0}
         }
+
+    tensor = preprocess(img).unsqueeze(0).to(device)
+    with torch.no_grad():
+        out   = cnn_model(tensor)
+        probs = torch.nn.functional.softmax(out[0], dim=0)
+
+    top_prob, top_idx = torch.topk(probs, 1)
+    species    = custom_classes[top_idx[0].item()]
+    confidence = round(top_prob[0].item() * 100, 2)
+    total_ms   = round((time.time() - t0) * 1000, 2)
+    return {
+        "species":         species,
+        "scientific_name": "",
+        "confidence":      confidence,
+        "description":     "",
+        "model_type":      "cnn_fallback",
+        "latency": {"preprocessing": 0, "inference": total_ms, "postprocessing": 0, "total": total_ms}
     }
-
-# ==========================================
-# 5. Gemini GenAI ? Auto-loaded from .env
-# ==========================================
-_gemini_client = None
-
-def get_gemini_client():
-    global _gemini_client
-    if not GEMINI_API_KEY:
-        return None
-    if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-        print("? Gemini client initialised from environment.")
-    return _gemini_client
-
-def gemini_generate(prompt: str) -> str | None:
-    client = get_gemini_client()
-    if not client:
-        return None
-    resp = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
-    return resp.text
 
 # ==========================================
 # 6. API Endpoints
@@ -226,7 +259,7 @@ async def health():
         "device":         str(device),
     }
 
-# ?? Classify ??????????????????????????????????????????????????????????????????
+# Classify - Gemini Vision (200+ species) with CNN fallback
 @app.post("/api/classify")
 async def api_classify(
     file:       UploadFile = File(...),
@@ -234,7 +267,7 @@ async def api_classify(
 ):
     try:
         raw     = await file.read()
-        result  = classify_image(raw)
+        result  = classify_image_gemini(raw)
         scan_id = str(uuid.uuid4())
 
         db_insert("scans", {
@@ -330,7 +363,7 @@ async def api_chat(
     if not get_gemini_client():
         fallback = DEMO_RESPONSES.get(species_context,
             "WildLens AI is ready. Ask me anything about wildlife, habitats, or conservation!")
-        response_text = f"[Demo] {fallback}"
+        response_text = f"{fallback}"
         db_insert("chat_logs", {
             "session_id":      sid,
             "role":            "assistant",
@@ -345,15 +378,15 @@ async def api_chat(
             f"You are WildLens AI, an expert wildlife intelligence assistant. "
             f"Current species context: '{species_context or 'General Wildlife'}'. "
             f"Provide insightful, accurate, conservation-focused responses. "
-            f"Keep answers concise and engaging."
+            f"Keep answers concise and engaging. Never mention API errors or technical details."
         )
         full_prompt = system + "\n\n"
-        for turn in history[-6:]:  # trailing 6-turn context window
+        for turn in history[-6:]:
             prefix = "User: " if turn["role"] == "user" else "Assistant: "
             full_prompt += prefix + turn["content"] + "\n"
         full_prompt += f"User: {message}\nAssistant:"
 
-        response_text = gemini_generate(full_prompt) or "No response received."
+        response_text = gemini_generate(full_prompt) or "I'm having trouble responding right now. Please try again."
 
         db_insert("chat_logs", {
             "session_id":      sid,
@@ -364,7 +397,10 @@ async def api_chat(
         })
         return JSONResponse(content={"response": response_text, "session_id": sid})
     except Exception as e:
-        return JSONResponse(content={"response": f"Error: {str(e)}"}, status_code=500)
+        err = str(e).lower()
+        if "quota" in err or "429" in err or "exhausted" in err:
+            return JSONResponse(content={"response": QUOTA_MSG})
+        return JSONResponse(content={"response": "Something went wrong. Please try again in a moment."})
 
 # ?? Enterprise Report ?????????????????????????????????????????????????????????
 @app.post("/api/report")
