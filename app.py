@@ -113,6 +113,8 @@ def gemini_generate(prompt: str) -> str | None:
             print(f"[WARN] Groq API returned status {resp.status_code}: {err_data}")
             if resp.status_code == 429:
                 return QUOTA_MSG
+            if resp.status_code == 401:
+                return "The API Key set in the Render Environment settings is invalid. Please update the GEMINI_API_KEY or GROQ_API_KEY on the Render Dashboard to match your new Groq key."
             return None
     except Exception as e:
         print(f"[WARN] Groq request failed: {e}")
