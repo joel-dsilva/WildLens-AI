@@ -1,11 +1,11 @@
 fastapi
 uvicorn
-google-genai>=0.8.0
 pillow
-torch
-torchvision
 pandas
 numpy
 python-multipart
 supabase
 python-dotenv
+google-generativeai>=0.8.0
+torch==2.2.2+cpu
+torchvision==0.17.2+cpu

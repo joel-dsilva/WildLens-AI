@@ -14,14 +14,13 @@ from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types as genai_types
+import google.generativeai as genai
 from supabase import create_client, Client
 
 # ==========================================
 # 1. Environment & Configuration
 # ==========================================
-load_dotenv()  # Auto-loads .env file ? no manual setup needed
+load_dotenv()  # Auto-loads .env file - no manual setup needed
 
 GEMINI_API_KEY   = os.environ.get("GEMINI_API_KEY", "")
 SUPABASE_URL     = os.environ.get("SUPABASE_URL", "")
@@ -75,28 +74,28 @@ app.add_middleware(
 )
 
 # ==========================================
-# ==========================================
 # 4. Gemini GenAI - Auto-loaded from .env
 # ==========================================
-_gemini_client = None
+_gemini_configured = False
 
 def get_gemini_client():
-    global _gemini_client
+    global _gemini_configured
     if not GEMINI_API_KEY:
-        return None
-    if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+        return False
+    if not _gemini_configured:
+        genai.configure(api_key=GEMINI_API_KEY)
+        _gemini_configured = True
         print("[OK] Gemini client initialised from environment.")
-    return _gemini_client
+    return _gemini_configured
 
 QUOTA_MSG = "The AI assistant is currently busy. Please wait a moment and try again."
 
 def gemini_generate(prompt: str) -> str | None:
-    client = get_gemini_client()
-    if not client:
+    if not get_gemini_client():
         return None
     try:
-        resp = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        resp = model.generate_content(prompt)
         return resp.text
     except Exception as e:
         err = str(e).lower()
@@ -108,20 +107,11 @@ def gemini_generate(prompt: str) -> str | None:
 def classify_image_gemini(image_bytes: bytes) -> dict:
     """Use Gemini Vision to identify any animal species in the image."""
     t0 = time.time()
-    client = get_gemini_client()
-
-    if not client:
-        # Fallback: use local CNN if Gemini not available
+    if not get_gemini_client():
         return classify_image_cnn(image_bytes)
 
     try:
-        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
-        # Detect MIME type
         img_obj = Image.open(io.BytesIO(image_bytes))
-        fmt = img_obj.format or "JPEG"
-        mime_map = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp", "GIF": "image/gif"}
-        mime_type = mime_map.get(fmt.upper(), "image/jpeg")
-
         prompt = (
             "You are a professional wildlife biologist. Look at this image carefully.\n"
             "Identify the primary animal species visible.\n"
@@ -131,13 +121,9 @@ def classify_image_gemini(image_bytes: bytes) -> dict:
             "If no animal is visible, set species to \"No Animal Detected\" and confidence to 0."
         )
 
-        resp = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[
-                genai_types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                prompt
-            ]
-        )
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        resp = model.generate_content([img_obj, prompt])
+        
         raw = resp.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
         data = json.loads(raw)
         total_ms = round((time.time() - t0) * 1000, 2)
