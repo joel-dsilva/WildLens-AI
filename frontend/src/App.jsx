@@ -378,7 +378,7 @@ export default function App() {
                           <>
                             {activeImage.result.confidence >= 45 ? (
                               <div className="result-top" style={{ alignItems: 'center' }}>
-                                <span className="result-emoji" style={{ fontSize: '2.5rem', marginRight: '1rem' }}>{EMOJI[activeImage.result.species] || "🐾"}</span>
+                                <span className="result-emoji" style={{ fontSize: '2.5rem', marginRight: '1rem' }}>{EMOJI_MAP[activeImage.result.species] || "🐾"}</span>
                                 <div>
                                   <div className="result-lbl" style={{ fontSize: '1.2rem', fontWeight: 600, color: '#1f2937' }}>
                                     It is a {activeImage.result.species}
@@ -575,7 +575,7 @@ export default function App() {
                       <div className="card-head"><TrendingUp size={14}/><span>Species Frequency</span></div>
                       {topSp.map(([sp,ct]) => (
                         <div key={sp} className="freq-row">
-                          <span className="freq-name">{EMOJI[sp]||"🐾"} {sp}</span>
+                          <span className="freq-name">{EMOJI_MAP[sp]||"🐾"} {sp}</span>
                           <div className="freq-track"><div className="freq-fill" style={{width:`${(ct/history.length)*100}%`}}/></div>
                           <span className="freq-ct">{ct}</span>
                         </div>
@@ -593,7 +593,7 @@ export default function App() {
                         <div key={s.id} className="hist-item">
                           <img src={s.img} alt={s.species} className="hist-thumb"/>
                           <div className="hist-info">
-                            <div className="hist-species">{EMOJI[s.species]||"🐾"} {s.species}</div>
+                            <div className="hist-species">{EMOJI_MAP[s.species]||"🐾"} {s.species}</div>
                             <div className="hist-meta">
                               <span style={{color:confidenceColor(s.confidence)}}>{s.confidence}% confidence</span>
                               <span>·</span>
