@@ -415,7 +415,7 @@ export default function App() {
                         <div className="card">
                           <div className="card-head"><ArrowRight size={14}/><span>Food Chain — {activeImage.ecoInfo.food_chain?.trophic_level || "Unknown"}</span></div>
                           <div className="chain">
-                            {(activeImage.ecoInfo.food_chain?.chain || []).map((l,i,arr) => (
+                            {(Array.isArray(activeImage.ecoInfo.food_chain?.chain) ? activeImage.ecoInfo.food_chain.chain : []).map((l,i,arr) => (
                               <React.Fragment key={i}>
                                 <span className={`cnode ${l===activeImage.result?.species?"cnode-active":""}`}>{l}</span>
                                 {i<arr.length-1 && <span className="carrow">→</span>}
@@ -510,7 +510,7 @@ export default function App() {
                       <div className="card">
                         <div className="card-head"><ArrowRight size={14}/><span>Food Chain — {d.food_chain?.trophic_level}</span></div>
                         <div className="chain">
-                          {d.food_chain?.chain?.map((l,i,arr) => (
+                          {(Array.isArray(d.food_chain?.chain) ? d.food_chain.chain : []).map((l,i,arr) => (
                             <React.Fragment key={i}>
                               <span className={`cnode ${l.toLowerCase()===selAnimal?.toLowerCase()?"cnode-active":""}`}>{l}</span>
                               {i<arr.length-1 && <span className="carrow">→</span>}
