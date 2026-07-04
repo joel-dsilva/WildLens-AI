@@ -1,14 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Camera, UploadCloud, MessageSquare, BookOpen, BarChart2,
-  Loader2, Send, ChevronRight, Zap, Globe, Leaf,
+  Loader2, Send, ChevronRight, Zap, Globe,
   Clock, TrendingUp, X, RefreshCw, ArrowRight,
-  Activity, Microscope, Shield, Plus, ImageIcon
+  Activity, Microscope, Shield, Plus, Search
 } from 'lucide-react';
 import './App.css';
 
-const ANIMALS = ["Dog", "Horse", "Elephant", "Butterfly", "Chicken", "Cat", "Cow", "Sheep", "Squirrel", "Spider"];
-const EMOJI = { Dog:"🐕", Horse:"🐴", Elephant:"🐘", Butterfly:"🦋", Chicken:"🐔", Cat:"🐱", Cow:"🐄", Sheep:"🐑", Squirrel:"🐿️", Spider:"🕷️" };
+const POPULAR_ANIMALS = [
+  "Lion","Tiger","Elephant","Giraffe","Zebra","Cheetah","Gorilla","Panda",
+  "Polar Bear","Wolf","Eagle","Dolphin","Shark","Penguin","Crocodile",
+  "Kangaroo","Koala","Chimpanzee","Jaguar","Snow Leopard","Flamingo","Orangutan",
+  "Bald Eagle","Komodo Dragon","Blue Whale","Axolotl","Pangolin","Platypus"
+];
+const EMOJI_MAP = {
+  Dog:"🐕", Horse:"🐴", Elephant:"🐘", Butterfly:"🦋", Chicken:"🐔",
+  Cat:"🐱", Cow:"🐄", Sheep:"🐑", Squirrel:"🐿️", Spider:"🕷️",
+  Lion:"🦁", Tiger:"🐯", Giraffe:"🦒", Zebra:"🦓", Cheetah:"🐆",
+  Gorilla:"🦍", Panda:"🐼", Wolf:"🐺", Eagle:"🦅", Dolphin:"🐬",
+  Shark:"🦈", Penguin:"🐧", Crocodile:"🐊", Kangaroo:"🦘", Koala:"🐨",
+  Jaguar:"🐆", Chimpanzee:"🐒", Flamingo:"🦩", Orangutan:"🦧",
+  Platypus:"🦆", Axolotl:"🦎", Pangolin:"🐾"
+};
+const getEmoji = (name) => EMOJI_MAP[name] || "🐾";
+
 
 const HOST = window.location.hostname === "localhost" ? "http://127.0.0.1:8000" : "";
 
@@ -33,10 +48,11 @@ export default function App() {
   const canvasRef  = useRef(null);
   const fileRef    = useRef(null);
 
-  // Encyclopedia
+  // Encyclopedia — search any animal
+  const [encQuery, setEncQuery]     = useState("");
   const [selAnimal, setSelAnimal]   = useState(null);
   const [encData, setEncData]       = useState({});
-  const [loadingEnc, setLoadingEnc] = useState(null);
+  const [loadingEnc, setLoadingEnc] = useState(false);
 
   // Chat (right sidebar)
   const chatBottom = useRef(null);
@@ -162,16 +178,23 @@ export default function App() {
   const resetAll = () => { setImages([]); setActiveIdx(0); if(fileRef.current) fileRef.current.value=""; };
 
   // ── Encyclopedia ──────────────────────────────────────
-  const openAnimal = async (a) => {
-    setSelAnimal(a);
-    if (encData[a]) return;
-    setLoadingEnc(a);
-    const fd = new FormData(); fd.append("species", a);
+  const searchAnimal = async (query) => {
+    if (!query.trim()) return;
+    const key = query.trim().toLowerCase();
+    setSelAnimal(query.trim());
+    if (encData[key]) return; // already cached
+    setLoadingEnc(true);
+    const fd = new FormData(); fd.append("query", query.trim());
     try {
-      const r = await fetch(`${HOST}/api/info`, { method:"POST", body:fd });
-      const json = await r.json();
-      setEncData(prev => ({ ...prev, [a]: json }));
-    } catch {} finally { setLoadingEnc(null); }
+      const r = await fetch(`${HOST}/api/search`, { method:"POST", body:fd });
+      const data = await r.json();
+      setEncData(prev => ({ ...prev, [key]: data }));
+    } catch {} finally { setLoadingEnc(false); }
+  };
+
+  const handleEncSearch = (e) => {
+    e.preventDefault();
+    searchAnimal(encQuery);
   };
 
   // ── Chat ──────────────────────────────────────────────
@@ -443,62 +466,88 @@ export default function App() {
           {/* ════ ENCYCLOPEDIA ════ */}
           {tab==="encyclopedia" && (
             <div className="enc-layout">
-              <div className="animal-grid">
-                {ANIMALS.map(a => (
-                  <button key={a} className={`acard ${selAnimal===a?"acard-sel":""}`} onClick={()=>openAnimal(a)}>
-                    <span className="acard-emoji">{EMOJI[a]}</span>
-                    <span className="acard-name">{a}</span>
-                    {loadingEnc===a && <Loader2 size={13} className="spin acard-loader"/>}
+              {/* Search bar */}
+              <form className="enc-search-bar" onSubmit={handleEncSearch}>
+                <div className="enc-search-input-wrap">
+                  <Search size={15} className="enc-search-icon"/>
+                  <input
+                    className="enc-search-input"
+                    placeholder="Search any animal — Lion, Axolotl, Blue Whale, Pangolin…"
+                    value={encQuery}
+                    onChange={e => setEncQuery(e.target.value)}
+                  />
+                </div>
+                <button type="submit" className="btn-accent" disabled={!encQuery.trim() || loadingEnc}>
+                  {loadingEnc ? <Loader2 size={14} className="spin"/> : <Search size={14}/>}
+                  Search
+                </button>
+              </form>
+
+              {/* Popular quick-picks */}
+              <div className="popular-label">Popular Animals</div>
+              <div className="popular-grid">
+                {POPULAR_ANIMALS.map(a => (
+                  <button
+                    key={a}
+                    className={`pop-chip ${selAnimal?.toLowerCase()===a.toLowerCase()?"pop-chip-active":""}`}
+                    onClick={() => { setEncQuery(a); searchAnimal(a); }}
+                  >
+                    {getEmoji(a)} {a}
                   </button>
                 ))}
               </div>
 
-              {selAnimal && (
-                <div className="enc-detail">
-                  <div className="enc-header">
-                    <span className="enc-emoji">{EMOJI[selAnimal]}</span>
-                    <div>
-                      <h2 className="enc-title">{selAnimal}</h2>
-                      <p className="enc-sub">Ecological Profile — Gemini AI</p>
+              {/* Loading */}
+              {loadingEnc && (
+                <div className="card loading-row"><Loader2 size={18} className="spin"/>Looking up {selAnimal} with Gemini AI…</div>
+              )}
+
+              {/* Result */}
+              {selAnimal && encData[selAnimal?.toLowerCase()] && !loadingEnc && (() => {
+                const d = encData[selAnimal.toLowerCase()];
+                return (
+                  <div className="enc-detail">
+                    <div className="enc-header">
+                      <span className="enc-emoji">{getEmoji(d.species || selAnimal)}</span>
+                      <div>
+                        <h2 className="enc-title">{d.species || selAnimal}</h2>
+                        {d.scientific_name && <p className="enc-sci">{d.scientific_name}</p>}
+                        <p className="enc-sub">Ecological Profile — Gemini AI</p>
+                      </div>
                     </div>
-                  </div>
-
-                  {loadingEnc===selAnimal && <div className="card loading-row"><Loader2 size={18} className="spin"/>Fetching data…</div>}
-
-                  {encData[selAnimal] && (
                     <div className="enc-body">
                       <div className="card">
-                        <div className="card-head"><Globe size={14}/><span>Habitat</span></div>
-                        <div className="kv"><span className="kk">Climate</span><span className="kv-val">{encData[selAnimal].habitat?.climate}</span></div>
-                        <div className="kv"><span className="kk">Range</span><span className="kv-val">{encData[selAnimal].habitat?.distribution}</span></div>
-                        <p className="kdesc">{encData[selAnimal].habitat?.description}</p>
+                        <div className="card-head"><Globe size={14}/><span>Habitat &amp; Distribution</span></div>
+                        <div className="kv"><span className="kk">Climate</span><span className="kv-val">{d.habitat?.climate}</span></div>
+                        <div className="kv"><span className="kk">Range</span><span className="kv-val">{d.habitat?.distribution}</span></div>
+                        <p className="kdesc">{d.habitat?.description}</p>
                       </div>
                       <div className="card">
-                        <div className="card-head"><ArrowRight size={14}/><span>Food Chain</span></div>
+                        <div className="card-head"><ArrowRight size={14}/><span>Food Chain — {d.food_chain?.trophic_level}</span></div>
                         <div className="chain">
-                          {encData[selAnimal].food_chain?.chain?.map((l,i,arr) => (
+                          {d.food_chain?.chain?.map((l,i,arr) => (
                             <React.Fragment key={i}>
-                              <span className={`cnode ${l===selAnimal?"cnode-active":""}`}>{l}</span>
+                              <span className={`cnode ${l.toLowerCase()===selAnimal?.toLowerCase()?"cnode-active":""}`}>{l}</span>
                               {i<arr.length-1 && <span className="carrow">→</span>}
                             </React.Fragment>
                           ))}
                         </div>
-                        <p className="kdesc">{encData[selAnimal].food_chain?.description}</p>
+                        <p className="kdesc">{d.food_chain?.description}</p>
                       </div>
                       <div className="card">
-                        <div className="card-head"><Shield size={14}/><span>Conservation</span></div>
-                        <span className="iucn-badge" style={{borderColor:statusColor(encData[selAnimal].conservation?.status),color:statusColor(encData[selAnimal].conservation?.status)}}>
-                          {encData[selAnimal].conservation?.status}
+                        <div className="card-head"><Shield size={14}/><span>IUCN Conservation Status</span></div>
+                        <span className="iucn-badge" style={{borderColor:statusColor(d.conservation?.status),color:statusColor(d.conservation?.status)}}>
+                          {d.conservation?.status}
                         </span>
-                        <div className="kv" style={{marginTop:10}}><span className="kk">Threats</span><span className="kv-val">{encData[selAnimal].conservation?.threats}</span></div>
-                        <p className="kdesc" style={{marginTop:6}}>{encData[selAnimal].conservation?.actions}</p>
+                        <div className="kv" style={{marginTop:10}}><span className="kk">Threats</span><span className="kv-val">{d.conservation?.threats}</span></div>
+                        <div className="kv"><span className="kk">Actions</span><span className="kv-val">{d.conservation?.actions}</span></div>
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
+                  </div>
+                );
+              })()}
 
-              {!selAnimal && (
+              {!selAnimal && !loadingEnc && (
                 <div className="enc-prompt">
                   <div className="empty-icon">📖</div>
                   <h3>Select an animal above</h3>

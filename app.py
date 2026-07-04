@@ -215,7 +215,7 @@ preprocess = transforms.Compose([
 ])
 
 def classify_image_cnn(image_bytes: bytes) -> dict:
-    """Fallback CNN classifier for the 10 training classes."""
+    """Primary CNN classifier - unlimited, no API quota."""
     t0  = time.time()
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
@@ -231,16 +231,22 @@ def classify_image_cnn(image_bytes: bytes) -> dict:
         out   = cnn_model(tensor)
         probs = torch.nn.functional.softmax(out[0], dim=0)
 
-    top_prob, top_idx = torch.topk(probs, 1)
-    species    = custom_classes[top_idx[0].item()]
-    confidence = round(top_prob[0].item() * 100, 2)
-    total_ms   = round((time.time() - t0) * 1000, 2)
+    top5_probs, top5_ids = torch.topk(probs, 3)
+    species    = custom_classes[top5_ids[0].item()]
+    confidence = round(top5_probs[0].item() * 100, 2)
+    # Build top-3 alternatives
+    alternatives = [
+        {"species": custom_classes[top5_ids[i].item()], "confidence": round(top5_probs[i].item() * 100, 2)}
+        for i in range(1, 3)
+    ]
+    total_ms = round((time.time() - t0) * 1000, 2)
     return {
         "species":         species,
         "scientific_name": "",
         "confidence":      confidence,
+        "alternatives":    alternatives,
         "description":     "",
-        "model_type":      "cnn_fallback",
+        "model_type":      "custom_cnn",
         "latency": {"preprocessing": 0, "inference": total_ms, "postprocessing": 0, "total": total_ms}
     }
 
@@ -260,15 +266,15 @@ async def health():
         "device":         str(device),
     }
 
-# Classify - Gemini Vision (200+ species) with CNN fallback
+# Classify — Custom CNN (primary, no API quota)
 @app.post("/api/classify")
 async def api_classify(
     file:       UploadFile = File(...),
     session_id: str        = Form(default=""),
 ):
     try:
-        raw     = await file.read()
-        result  = classify_image_gemini(raw)
+        raw    = await file.read()
+        result = classify_image_cnn(raw)
         scan_id = str(uuid.uuid4())
 
         db_insert("scans", {
@@ -286,13 +292,21 @@ async def api_classify(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ?? Species Info (structured Gemini JSON) ????????????????????????????????????
+# In-memory cache for species info (avoids hammering Gemini for same species)
+_info_cache: dict = {}
+
+# Species Info — cached Gemini JSON
 @app.post("/api/info")
 async def api_info(species: str = Form(...)):
+    # Return from cache if already fetched
+    cache_key = species.lower().strip()
+    if cache_key in _info_cache:
+        return JSONResponse(content=_info_cache[cache_key])
+
     demo_payload = {
         "habitat": {
             "climate":      "Varies by region",
-            "distribution": "Global ? species-dependent",
+            "distribution": "Global — species-dependent",
             "description":  f"The {species} adapts to a range of ecosystems depending on local flora and climate."
         },
         "food_chain": {
@@ -317,16 +331,58 @@ async def api_info(species: str = Form(...)):
             '"conservation":{"status":"str","threats":"str","actions":"str"}}'
         )
         prompt = (
-            f"Return structured JSON (no markdown wrapping) for the animal '{species}' "
-            f"matching this exact schema: {schema}"
+            f"Return structured JSON (no markdown) for the animal '{species}' "
+            f"matching this exact schema: {schema}. Be factual and concise."
         )
         raw_text = gemini_generate(prompt)
-        if not raw_text:
+        if not raw_text or raw_text == QUOTA_MSG:
             return JSONResponse(content=demo_payload)
         clean = raw_text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-        return JSONResponse(content=json.loads(clean))
-    except Exception as e:
+        parsed = json.loads(clean)
+        _info_cache[cache_key] = parsed  # cache it
+        return JSONResponse(content=parsed)
+    except Exception:
         return JSONResponse(content=demo_payload)
+
+
+# Encyclopedia search — any animal name, powered by Gemini
+@app.post("/api/search")
+async def api_search(query: str = Form(...)):
+    """Search for any animal and return structured ecological info."""
+    cache_key = query.lower().strip()
+    if cache_key in _info_cache:
+        return JSONResponse(content={"species": query.title(), **_info_cache[cache_key]})
+
+    demo = {
+        "species": query.title(),
+        "habitat": {"climate": "Varies", "distribution": "Global", "description": f"{query.title()} inhabits a variety of ecosystems."},
+        "food_chain": {"trophic_level": "Varies", "chain": ["Plants", query.title(), "Predators"], "description": f"{query.title()} plays an important ecological role."},
+        "conservation": {"status": "Data Deficient", "threats": "Habitat loss, climate change.", "actions": "Research and habitat protection needed."}
+    }
+
+    if not get_gemini_client():
+        return JSONResponse(content=demo)
+
+    try:
+        schema = (
+            '{"species":"str","scientific_name":"str","habitat":{"climate":"str","distribution":"str","description":"str"},'
+            '"food_chain":{"trophic_level":"str","chain":["str"],"description":"str"},'
+            '"conservation":{"status":"str","threats":"str","actions":"str"}}'
+        )
+        prompt = (
+            f"Return structured JSON (no markdown) for the animal '{query}'. "
+            f"Use this exact schema: {schema}. Be factual and concise. "
+            f"If the query is not an animal, return the closest matching animal species."
+        )
+        raw_text = gemini_generate(prompt)
+        if not raw_text or raw_text == QUOTA_MSG:
+            return JSONResponse(content=demo)
+        clean = raw_text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        parsed = json.loads(clean)
+        _info_cache[cache_key] = {k: v for k, v in parsed.items() if k != "species"}
+        return JSONResponse(content=parsed)
+    except Exception:
+        return JSONResponse(content=demo)
 
 # ?? Chat ??????????????????????????????????????????????????????????????????????
 DEMO_RESPONSES = {
