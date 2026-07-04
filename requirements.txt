@@ -2,7 +2,7 @@ fastapi
 uvicorn
 pillow
 pandas
-numpy
+numpy<2.0.0
 python-multipart
 supabase
 python-dotenv

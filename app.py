@@ -14,7 +14,6 @@ from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
-import google.generativeai as genai
 from supabase import create_client, Client
 
 # ==========================================
@@ -120,55 +119,8 @@ def gemini_generate(prompt: str) -> str | None:
         return QUOTA_MSG
 
 def classify_image_gemini(image_bytes: bytes) -> dict:
-    """Use AI to identify any animal species in the image."""
-    t0 = time.time()
-    if not get_groq_configured():
-        return classify_image_cnn(image_bytes)
-
-    try:
-        img_obj = Image.open(io.BytesIO(image_bytes))
-        prompt = (
-            "You are a professional wildlife biologist. Look at this image carefully.\n"
-            "Identify the primary animal species visible.\n"
-            "Respond ONLY with valid JSON in this exact format (no markdown, no extra text):\n"
-            '{"species": "<common name of the animal>", "scientific_name": "<scientific name>", '
-            '"confidence": <integer 0-100>, "description": "<one sentence about this animal>"}\n'
-            "If no animal is visible, set species to \"No Animal Detected\" and confidence to 0."
-        )
-
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        resp = model.generate_content([img_obj, prompt])
-        
-        raw = resp.text.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-        data = json.loads(raw)
-        total_ms = round((time.time() - t0) * 1000, 2)
-        return {
-            "species":         data.get("species", "Unknown"),
-            "scientific_name": data.get("scientific_name", ""),
-            "confidence":      data.get("confidence", 0),
-            "description":     data.get("description", ""),
-            "model_type":      "gemini_vision",
-            "latency": {
-                "preprocessing": 0,
-                "inference": total_ms,
-                "postprocessing": 0,
-                "total": total_ms,
-            }
-        }
-    except Exception as e:
-        err = str(e).lower()
-        if "quota" in err or "429" in err or "exhausted" in err or "resource" in err:
-            return {
-                "species": "Quota Exceeded",
-                "scientific_name": "",
-                "confidence": 0,
-                "description": "API quota limit reached. Please try again in a moment.",
-                "model_type": "gemini_vision",
-                "latency": {"preprocessing": 0, "inference": 0, "postprocessing": 0, "total": 0},
-                "error": "quota_exceeded"
-            }
-        # Fallback to CNN
-        return classify_image_cnn(image_bytes)
+    """Fallback handler to classify images."""
+    return classify_image_cnn(image_bytes)
 
 
 # ==========================================
