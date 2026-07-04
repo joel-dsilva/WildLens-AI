@@ -102,7 +102,8 @@ def gemini_generate(prompt: str) -> str | None:
         err = str(e).lower()
         if "quota" in err or "429" in err or "exhausted" in err or "resource" in err:
             return QUOTA_MSG
-        raise
+        print(f"[WARN] Gemini error: {e}")
+        return QUOTA_MSG
 
 def classify_image_gemini(image_bytes: bytes) -> dict:
     """Use Gemini Vision to identify any animal species in the image."""
@@ -348,8 +349,11 @@ async def api_chat(
     chat_history:   str = Form(default="[]"),
     session_id:     str = Form(default=""),
 ):
-    history = json.loads(chat_history)
-    sid     = session_id or str(uuid.uuid4())
+    try:
+        history = json.loads(chat_history)
+    except Exception:
+        history = []
+    sid = session_id or str(uuid.uuid4())
 
     # Log the user message
     db_insert("chat_logs", {
