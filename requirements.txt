@@ -6,6 +6,6 @@ numpy
 python-multipart
 supabase
 python-dotenv
-google-generativeai>=0.8.0
+requests
 torch==2.2.2+cpu
 torchvision==0.17.2+cpu

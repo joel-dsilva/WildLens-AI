@@ -255,7 +255,7 @@ export default function App() {
             <span className="pill"><Zap size={11}/>{history.length} scans</span>
             <span className="pill"><Activity size={11}/>{avgConf}% avg</span>
           </div>
-          <p className="footer-note">Gemini Vision + 200+ Species</p>
+          <p className="footer-note">Custom CNN + Unlimited Scans</p>
         </div>
       </aside>
 
@@ -267,7 +267,7 @@ export default function App() {
             <h1 className="topbar-title">{NAV.find(n=>n.id===tab)?.label}</h1>
             <span className="topbar-sub">
               {tab==="scanner"      && "Upload multiple animal photos and get instant AI-powered identification"}
-              {tab==="encyclopedia" && "Explore detailed ecological profiles powered by Gemini AI"}
+              {tab==="encyclopedia" && "Explore detailed ecological profiles powered by AI"}
               {tab==="history"      && `${history.length} scans recorded in this session`}
             </span>
           </div>
@@ -352,7 +352,7 @@ export default function App() {
                   <h3>Drop animal photos here</h3>
                   <p>or click to browse — supports multiple files at once</p>
                   <span className="drop-hint">JPG · PNG · WEBP · GIF</span>
-                  <span className="drop-hint" style={{color:"#6366f1"}}>✨ Powered by Gemini Vision — identify 200+ species</span>
+                  <span className="drop-hint" style={{color:"#6366f1"}}>✨ Fast Offline Model — unlimited free scans</span>
                 </div>
               )}
 
@@ -367,7 +367,7 @@ export default function App() {
                       {activeImage.scanning && (
                         <div className="preview-scanning">
                           <Loader2 size={32} className="spin"/>
-                          <p>Analyzing with Gemini Vision…</p>
+                          <p>Analyzing image structure…</p>
                         </div>
                       )}
                     </div>
@@ -407,7 +407,7 @@ export default function App() {
                             )}
                             <div className="model-chip">
                               <Zap size={11}/>
-                              {activeImage.result.model_type === "gemini_vision" ? "Gemini Vision" : "CNN Fallback"}
+                              {activeImage.result.model_type === "custom_cnn" ? "Local CNN" : "Classification Model"}
                               {" · "}{activeImage.result.latency?.total}ms
                             </div>
                           </>
@@ -499,7 +499,7 @@ export default function App() {
 
               {/* Loading */}
               {loadingEnc && (
-                <div className="card loading-row"><Loader2 size={18} className="spin"/>Looking up {selAnimal} with Gemini AI…</div>
+                <div className="card loading-row"><Loader2 size={18} className="spin"/>Looking up {selAnimal} with AI…</div>
               )}
 
               {/* Result */}
@@ -512,7 +512,7 @@ export default function App() {
                       <div>
                         <h2 className="enc-title">{d.species || selAnimal}</h2>
                         {d.scientific_name && <p className="enc-sci">{d.scientific_name}</p>}
-                        <p className="enc-sub">Ecological Profile — Gemini AI</p>
+                        <p className="enc-sub">Ecological Profile — AI Model</p>
                       </div>
                     </div>
                     <div className="enc-body">
@@ -551,7 +551,7 @@ export default function App() {
                 <div className="enc-prompt">
                   <div className="empty-icon">📖</div>
                   <h3>Select an animal above</h3>
-                  <p>Click any species card to load its full ecological profile, food chain, and IUCN conservation status powered by Gemini AI.</p>
+                  <p>Click any species card to load its full ecological profile, food chain, and IUCN conservation status powered by AI.</p>
                 </div>
               )}
             </div>
@@ -635,7 +635,7 @@ export default function App() {
         <div className="chat-panel-head">
           <MessageSquare size={16}/>
           <span>WildLens AI Chat</span>
-          <span className="chat-model-tag">Gemini 2.0</span>
+          <span className="chat-model-tag">AI Agent</span>
         </div>
 
         {images[activeIdx]?.result?.species && tab==="scanner" && (
