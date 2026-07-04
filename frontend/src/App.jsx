@@ -135,14 +135,7 @@ export default function App() {
         { id: Date.now(), species: d.species, confidence: d.confidence, ts: new Date().toISOString(), img: URL.createObjectURL(file) },
         ...prev
       ].slice(0, 60));
-      setMsgs(prev => [...prev, {
-        role:"bot",
-        text: d.species === "Quota Exceeded"
-          ? "I've hit my quota limit right now. Please try again in a moment! 🙏"
-          : `Detected **${d.species}** (${d.scientific_name || ""}) with ${d.confidence}% confidence${d.description ? " — " + d.description : ""}. Ask me anything!`,
-        ts: new Date()
-      }]);
-      if (d.species !== "Quota Exceeded" && d.species !== "No Animal Detected") {
+      if (d.species !== "Quota Exceeded" && d.species !== "No Animal Detected" && d.confidence >= 45) {
         fetchEco(idx, d.species);
       }
     } catch {
@@ -383,33 +376,25 @@ export default function App() {
                           </div>
                         ) : (
                           <>
-                            <div className="result-top">
-                              <span className="result-emoji">{EMOJI[activeImage.result.species] || "🐾"}</span>
-                              <div>
-                                <div className="result-lbl">Detected Species</div>
-                                <div className="result-name">{activeImage.result.species}</div>
-                                {activeImage.result.scientific_name && (
-                                  <div className="result-sci">{activeImage.result.scientific_name}</div>
-                                )}
+                            {activeImage.result.confidence >= 45 ? (
+                              <div className="result-top" style={{ alignItems: 'center' }}>
+                                <span className="result-emoji" style={{ fontSize: '2.5rem', marginRight: '1rem' }}>{EMOJI[activeImage.result.species] || "🐾"}</span>
+                                <div>
+                                  <div className="result-lbl" style={{ fontSize: '1.2rem', fontWeight: 600, color: '#1f2937' }}>
+                                    It is a {activeImage.result.species}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                            <div className="conf-row">
-                              <span>Match Confidence</span>
-                              <span style={{color:confidenceColor(activeImage.result.confidence),fontWeight:700}}>
-                                {activeImage.result.confidence}%
-                              </span>
-                            </div>
-                            <div className="conf-track">
-                              <div className="conf-fill" style={{width:`${activeImage.result.confidence}%`,background:confidenceColor(activeImage.result.confidence)}}/>
-                            </div>
-                            {activeImage.result.description && (
-                              <p className="result-desc">{activeImage.result.description}</p>
+                            ) : (
+                              <div className="result-top" style={{ alignItems: 'center' }}>
+                                <span className="result-emoji" style={{ fontSize: '2.5rem', marginRight: '1rem' }}>🤔</span>
+                                <div>
+                                  <div className="result-lbl" style={{ fontSize: '1.1rem', fontWeight: 500, color: '#4b5563', lineHeight: '1.5' }}>
+                                    I am unsure what this is.<br/>Try asking the AI Agent for help.
+                                  </div>
+                                </div>
+                              </div>
                             )}
-                            <div className="model-chip">
-                              <Zap size={11}/>
-                              {activeImage.result.model_type === "custom_cnn" ? "Local CNN" : "Classification Model"}
-                              {" · "}{activeImage.result.latency?.total}ms
-                            </div>
                           </>
                         )}
                       </div>
@@ -417,20 +402,20 @@ export default function App() {
                   </div>
 
                   {/* Eco info section — full width below image */}
-                  {activeImage.ecoInfo && !activeImage.scanning && (
+                  {activeImage.ecoInfo && typeof activeImage.ecoInfo === 'object' && !activeImage.scanning && activeImage.result?.confidence >= 45 && (
                     <div className="eco-section">
                       <div className="eco-grid">
                         <div className="card">
                           <div className="card-head"><Globe size={14}/><span>Habitat &amp; Distribution</span></div>
-                          <div className="kv"><span className="kk">Climate</span><span className="kv-val">{activeImage.ecoInfo.habitat?.climate}</span></div>
-                          <div className="kv"><span className="kk">Range</span><span className="kv-val">{activeImage.ecoInfo.habitat?.distribution}</span></div>
+                          <div className="kv"><span className="kk">Climate</span><span className="kv-val">{activeImage.ecoInfo.habitat?.climate || "Unknown"}</span></div>
+                          <div className="kv"><span className="kk">Range</span><span className="kv-val">{activeImage.ecoInfo.habitat?.distribution || "Unknown"}</span></div>
                           <p className="kdesc">{activeImage.ecoInfo.habitat?.description}</p>
                         </div>
 
                         <div className="card">
-                          <div className="card-head"><ArrowRight size={14}/><span>Food Chain — {activeImage.ecoInfo.food_chain?.trophic_level}</span></div>
+                          <div className="card-head"><ArrowRight size={14}/><span>Food Chain — {activeImage.ecoInfo.food_chain?.trophic_level || "Unknown"}</span></div>
                           <div className="chain">
-                            {activeImage.ecoInfo.food_chain?.chain?.map((l,i,arr) => (
+                            {(activeImage.ecoInfo.food_chain?.chain || []).map((l,i,arr) => (
                               <React.Fragment key={i}>
                                 <span className={`cnode ${l===activeImage.result?.species?"cnode-active":""}`}>{l}</span>
                                 {i<arr.length-1 && <span className="carrow">→</span>}
@@ -443,10 +428,10 @@ export default function App() {
                         <div className="card">
                           <div className="card-head"><Shield size={14}/><span>IUCN Conservation Status</span></div>
                           <span className="iucn-badge" style={{borderColor:statusColor(activeImage.ecoInfo.conservation?.status),color:statusColor(activeImage.ecoInfo.conservation?.status)}}>
-                            {activeImage.ecoInfo.conservation?.status}
+                            {activeImage.ecoInfo.conservation?.status || "Unknown"}
                           </span>
-                          <div className="kv" style={{marginTop:10}}><span className="kk">Threats</span><span className="kv-val">{activeImage.ecoInfo.conservation?.threats}</span></div>
-                          <div className="kv"><span className="kk">Actions</span><span className="kv-val">{activeImage.ecoInfo.conservation?.actions}</span></div>
+                          <div className="kv" style={{marginTop:10}}><span className="kk">Threats</span><span className="kv-val">{activeImage.ecoInfo.conservation?.threats || "Unknown"}</span></div>
+                          <div className="kv"><span className="kk">Actions</span><span className="kv-val">{activeImage.ecoInfo.conservation?.actions || "Unknown"}</span></div>
                         </div>
                       </div>
                     </div>

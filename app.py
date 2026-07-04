@@ -99,9 +99,7 @@ def gemini_generate(prompt: str) -> str | None:
         }
         payload = {
             "model": GROQ_MODEL,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
+            "messages": prompt if isinstance(prompt, list) else [{"role": "user", "content": prompt}],
             "temperature": 0.2
         }
         resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=10)
@@ -395,13 +393,12 @@ async def api_chat(
             f"Provide insightful, accurate, conservation-focused responses. "
             f"Keep answers concise and engaging. Never mention API errors or technical details."
         )
-        full_prompt = system + "\n\n"
+        messages = [{"role": "system", "content": system}]
         for turn in history[-6:]:
-            prefix = "User: " if turn["role"] == "user" else "Assistant: "
-            full_prompt += prefix + turn["content"] + "\n"
-        full_prompt += f"User: {message}\nAssistant:"
+            messages.append({"role": turn["role"] if turn["role"] in ["user", "assistant"] else "user", "content": turn["content"]})
+        messages.append({"role": "user", "content": message})
 
-        response_text = gemini_generate(full_prompt) or "I'm having trouble responding right now. Please try again."
+        response_text = gemini_generate(messages) or "I'm having trouble responding right now. Please try again."
 
         db_insert("chat_logs", {
             "session_id":      sid,
