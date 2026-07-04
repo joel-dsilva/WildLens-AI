@@ -12,7 +12,6 @@ dataset/
 
 # Node / Vite
 frontend/node_modules/
-frontend/dist/
 
 # OS junk
 .DS_Store
