@@ -136,7 +136,7 @@ export default function App() {
         ...prev
       ].slice(0, 60));
       if (d.species !== "Quota Exceeded" && d.species !== "No Animal Detected" && d.confidence >= 45) {
-        fetchEco(idx, d.species);
+        fetchEco(idx, d.species_list || [d.species]);
       }
     } catch {
       setImages(prev => {
@@ -147,14 +147,21 @@ export default function App() {
     }
   };
 
-  const fetchEco = async (idx, sp) => {
-    const fd = new FormData(); fd.append("species", sp);
+  const fetchEco = async (idx, speciesList) => {
+    if (!Array.isArray(speciesList) || speciesList.length === 0) return;
     try {
-      const r = await fetch(`${HOST}/api/info`, { method:"POST", body:fd });
-      const data = await r.json();
+      const promises = speciesList.map(async (sp) => {
+        const fd = new FormData(); fd.append("species", sp);
+        const r = await fetch(`${HOST}/api/info`, { method:"POST", body:fd });
+        const data = await r.json();
+        return { species: sp, data };
+      });
+      const results = await Promise.all(promises);
       setImages(prev => {
         const updated = [...prev];
-        if (updated[idx]) updated[idx] = { ...updated[idx], ecoInfo: data };
+        if (updated[idx]) {
+          updated[idx] = { ...updated[idx], ecoInfoList: results, activeEcoTab: 0, ecoInfo: results[0]?.data };
+        }
         return updated;
       });
     } catch {}
@@ -244,11 +251,10 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="pills">
-            <span className="pill"><Zap size={11}/>{history.length} scans</span>
-            <span className="pill"><Activity size={11}/>{avgConf}% avg</span>
+          <div className="pills" style={{flexDirection:"column", alignItems:"flex-start", gap: 4}}>
+            <span className="pill" style={{whiteSpace:"normal", textAlign:"left", lineHeight:"1.4"}}><Zap size={11}/> Fun Fact: Sloths can hold their breath longer than dolphins can.</span>
           </div>
-          <p className="footer-note">Custom CNN + Unlimited Scans</p>
+          <p className="footer-note">WildLens AI System</p>
         </div>
       </aside>
 
@@ -305,8 +311,8 @@ export default function App() {
                     <img src={img.url} alt="" className="thumb"/>
                     {img.scanning && <div className="thumb-overlay"><Loader2 size={14} className="spin"/></div>}
                     {img.result && !img.scanning && (
-                      <div className="thumb-badge" style={{background: img.result.error ? "#ef4444" : "#10b981"}}>
-                        {img.result.error ? "!" : `${img.result.confidence}%`}
+                      <div className="thumb-badge" style={{background: img.result.error ? "#ef4444" : "#10b981", padding: "2px 6px"}}>
+                        {img.result.error ? "!" : "✓"}
                       </div>
                     )}
                     <button className="thumb-remove" onClick={e=>{e.stopPropagation();removeImage(i)}}><X size={10}/></button>
@@ -377,13 +383,35 @@ export default function App() {
                         ) : (
                           <>
                             {activeImage.result.confidence >= 45 ? (
-                              <div className="result-top" style={{ alignItems: 'center' }}>
-                                <span className="result-emoji" style={{ fontSize: '2.5rem', marginRight: '1rem' }}>{EMOJI_MAP[activeImage.result.species] || "🐾"}</span>
-                                <div>
-                                  <div className="result-lbl" style={{ fontSize: '1.2rem', fontWeight: 600, color: '#1f2937' }}>
-                                    It is a {activeImage.result.species}
+                              <div className="result-top" style={{ alignItems: 'flex-start', flexDirection: 'column' }}>
+                                <div style={{display: 'flex', alignItems: 'center'}}>
+                                  <span className="result-emoji" style={{ fontSize: '2.5rem', marginRight: '1rem' }}>{EMOJI_MAP[activeImage.result.species] || "🐾"}</span>
+                                  <div>
+                                    <div className="result-lbl" style={{ fontSize: '1.2rem', fontWeight: 600, color: '#1f2937' }}>
+                                      {activeImage.result.species_list?.length > 1 ? "Multiple Animals Detected" : `It is a ${activeImage.result.species}`}
+                                    </div>
                                   </div>
                                 </div>
+                                
+                                {/* Multi-animal tabs */}
+                                {activeImage.result.species_list?.length > 1 && (
+                                  <div className="multi-tabs" style={{display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap'}}>
+                                    {activeImage.result.species_list.map((sp, i) => (
+                                      <button 
+                                        key={i} 
+                                        onClick={() => setImages(prev => { const u=[...prev]; if(u[activeIdx]) { u[activeIdx].activeEcoTab = i; u[activeIdx].ecoInfo = u[activeIdx].ecoInfoList[i].data; } return u; })}
+                                        style={{
+                                          padding: '4px 12px', borderRadius: '20px', border: 'none', cursor: 'pointer',
+                                          background: activeImage.activeEcoTab === i ? '#10b981' : '#f3f4f6',
+                                          color: activeImage.activeEcoTab === i ? '#fff' : '#4b5563',
+                                          fontWeight: activeImage.activeEcoTab === i ? 600 : 400
+                                        }}
+                                      >
+                                        {sp}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="result-top" style={{ alignItems: 'center' }}>

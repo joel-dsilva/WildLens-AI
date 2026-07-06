@@ -118,6 +118,51 @@ def gemini_generate(prompt: str) -> str | None:
         print(f"[WARN] Groq request failed: {e}")
         return QUOTA_MSG
 
+def groq_vision_detect(image_bytes: bytes) -> list:
+    """Use Groq Vision to identify all animals and humans in the image."""
+    if not get_groq_configured():
+        return []
+    try:
+        import base64
+        b64 = base64.b64encode(image_bytes).decode('utf-8')
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "llama-3.2-11b-vision-preview",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text", 
+                            "text": "Identify all animal species in this image, including humans. Return a comma-separated list of the names only (e.g., 'Dog, Human, Horse'). If there are no animals or humans, return 'None'."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{b64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "temperature": 0.1
+        }
+        resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=15)
+        if resp.status_code == 200:
+            content = resp.json()["choices"][0]["message"]["content"]
+            if "none" in content.lower() and len(content) < 10: 
+                return []
+            return [s.strip().title() for s in content.split(",") if s.strip()]
+        else:
+            print(f"[WARN] Groq Vision failed: {resp.text}")
+            return []
+    except Exception as e:
+        print(f"[WARN] Groq Vision exception: {e}")
+        return []
+
 def classify_image_gemini(image_bytes: bytes) -> dict:
     """Fallback handler to classify images."""
     return classify_image_cnn(image_bytes)
@@ -227,21 +272,43 @@ async def api_classify(
 ):
     try:
         raw    = await file.read()
-        result = classify_image_cnn(raw)
+        
+        species_list = []
+        model_used = "custom_cnn"
+        confidence = 0
+        
+        if get_groq_configured():
+            species_list = groq_vision_detect(raw)
+            if species_list:
+                model_used = "groq_vision"
+                confidence = 99.0
+                
+        if not species_list:
+            result = classify_image_cnn(raw)
+            species_list = [result["species"]]
+            confidence = result["confidence"]
+            model_used = result["model_type"]
+            
+        primary_species = species_list[0] if species_list else "Unknown"
         scan_id = str(uuid.uuid4())
 
         db_insert("scans", {
             "id":          scan_id,
             "session_id":  session_id or str(uuid.uuid4()),
-            "species":     result["species"],
-            "confidence":  result["confidence"],
-            "model_type":  result["model_type"],
-            "latency_ms":  result["latency"]["total"],
+            "species":     primary_species,
+            "confidence":  confidence,
+            "model_type":  model_used,
+            "latency_ms":  0,
             "created_at":  datetime.utcnow().isoformat(),
         })
 
-        result["scan_id"] = scan_id
-        return JSONResponse(content=result)
+        return JSONResponse(content={
+            "species": primary_species,
+            "species_list": species_list,
+            "confidence": confidence,
+            "model_type": model_used,
+            "scan_id": scan_id
+        })
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
