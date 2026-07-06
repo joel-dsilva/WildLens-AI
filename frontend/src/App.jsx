@@ -369,6 +369,18 @@ export default function App() {
             <button type="submit" className="btn-accent" style={{width: '100%', justifyContent: 'center', marginTop: 8}} disabled={authLoading}>
               {authLoading ? <Loader2 size={16} className="spin"/> : authMode === "login" ? "Log In" : "Sign Up"}
             </button>
+            <button 
+              type="button" 
+              className="btn-ghost" 
+              style={{width: '100%', justifyContent: 'center', background: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.08)'}}
+              onClick={() => {
+                const guestSession = { user: { id: "guest", email: "guest@wildlens.ai" }, success: true };
+                localStorage.setItem("wl_session", JSON.stringify(guestSession));
+                setSession(guestSession);
+              }}
+            >
+              Continue as Guest
+            </button>
           </form>
           <div className="auth-toggle" onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthError(""); }}>
             {authMode === "login" ? "Don't have an account? Sign up" : "Already have an account? Log in"}
