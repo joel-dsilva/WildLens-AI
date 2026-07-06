@@ -117,70 +117,81 @@ def gemini_generate(prompt: str) -> str | None:
     except Exception as e:
         print(f"[WARN] Groq request failed: {e}")
         return QUOTA_MSG
+import base64 as _b64
+import re as _re
+
+def _groq_vision_call(b64_image: str, prompt: str) -> str:
+    """Make a single Groq Vision API call and return raw text content."""
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_image}"}}
+            ]
+        }],
+        "temperature": 0.0,
+        "max_tokens": 150
+    }
+    resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=25)
+    if resp.status_code == 200:
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    else:
+        print(f"[WARN] Groq Vision API error ({resp.status_code}): {resp.text[:300]}")
+        return ""
+
+def _parse_vision_response(content: str) -> list:
+    """Parse a vision response into a clean list of names."""
+    if not content:
+        return []
+    # Strip any leading prose like "The animals are: Cat, Lion"
+    if ":" in content:
+        content = content.split(":")[-1].strip()
+    # Reject "none" responses
+    if content.lower().strip(" .") in ("none", ""):
+        return []
+    # Split on commas, clean up each entry
+    names = [_re.sub(r"[^a-zA-Z\s\-]", "", s).strip().title() for s in content.split(",")]
+    names = [n for n in names if n and len(n) > 1]
+    return names
 
 def groq_vision_detect(image_bytes: bytes) -> list:
-    """Use Groq Vision to identify ALL animals and humans in the image."""
+    """Use Groq Vision to identify ALL animals and humans in the image (two-pass)."""
     if not get_groq_configured():
         return []
     try:
-        import base64, re
-        b64 = base64.b64encode(image_bytes).decode('utf-8')
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "llama-3.2-11b-vision-preview",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                "Look very carefully at every living subject in this image. "
-                                "List EVERY animal species AND every human you can see, no matter how small or in the background. "
-                                "A human is also a valid subject — if you see a person, write 'Human'. "
-                                "Respond with ONLY a comma-separated list of names, nothing else. "
-                                "Examples of correct responses: 'Cat, Lion' or 'Human, Dog' or 'Horse' or 'Cat, Human, Parrot'. "
-                                "Do NOT write sentences. Do NOT write explanations. "
-                                "If you see absolutely nothing, respond with 'None'."
-                            )
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{b64}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            "temperature": 0.0,
-            "max_tokens": 100
-        }
-        resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=20)
-        if resp.status_code == 200:
-            content = resp.json()["choices"][0]["message"]["content"].strip()
-            print(f"[INFO] Groq Vision raw response: '{content}'")
+        b64 = _b64.b64encode(image_bytes).decode("utf-8")
 
-            # Strip any leading prose (e.g. "The animals are: Cat, Lion")
-            # Find the last colon and take everything after it if it exists
-            if ":" in content:
-                content = content.split(":")[-1].strip()
+        # === PASS 1: General subject detection ===
+        prompt1 = (
+            "Examine this image carefully. "
+            "List every living creature you can identify, including any humans/people. "
+            "Reply with ONLY a comma-separated list of names. "
+            "If you see a person or human being, write 'Human' in the list. "
+            "Examples: 'Cat, Liger' or 'Human, Dog' or 'Lion' or 'Human'. "
+            "Do NOT write any sentences or explanations. Just the names."
+        )
+        raw1 = _groq_vision_call(b64, prompt1)
+        print(f"[INFO] Groq Vision Pass 1 raw: '{raw1}'")
+        results = _parse_vision_response(raw1)
+        print(f"[INFO] Groq Vision Pass 1 parsed: {results}")
 
-            # If none found
-            if content.lower() in ("none", "none.", ""):
-                return []
+        # === PASS 2: Human-specific check (if Pass 1 returned nothing) ===
+        if not results:
+            prompt2 = "Does this image contain a human being or a person? Answer with only 'Yes' or 'No'."
+            raw2 = _groq_vision_call(b64, prompt2)
+            print(f"[INFO] Groq Vision Pass 2 (human check) raw: '{raw2}'")
+            if raw2.strip().lower().startswith("yes"):
+                results = ["Human"]
+                print("[INFO] Groq Vision Pass 2: Human detected")
 
-            # Remove any stray punctuation and split on commas
-            names = [re.sub(r"[^a-zA-Z\s\-]", "", s).strip().title() for s in content.split(",")]
-            names = [n for n in names if n and len(n) > 1]
-            print(f"[INFO] Groq Vision detected: {names}")
-            return names
-        else:
-            print(f"[WARN] Groq Vision failed ({resp.status_code}): {resp.text}")
-            return []
+        return results
+
     except Exception as e:
         print(f"[WARN] Groq Vision exception: {e}")
         return []
@@ -189,6 +200,7 @@ def groq_vision_detect(image_bytes: bytes) -> list:
 def classify_image_gemini(image_bytes: bytes) -> dict:
     """Fallback handler to classify images."""
     return classify_image_cnn(image_bytes)
+
 
 
 # ==========================================
