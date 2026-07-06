@@ -221,18 +221,18 @@ input  { font-family: var(--font); }
 /* Scanner content */
 .scanner-content { display: flex; flex-direction: column; gap: 14px; }
 
-/* Preview row */
+/* Preview row (expanded to utilize screen) */
 .preview-row {
-  display: grid; grid-template-columns: 280px 1fr; gap: 14px; align-items: start;
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; align-items: stretch;
 }
 .preview-box {
   border-radius: var(--r); overflow: hidden;
   border: 1px solid var(--border);
-  position: relative; background: var(--surface);
-  max-height: 240px;
+  position: relative; background: #000;
+  height: 420px;
 }
 .preview-img {
-  width: 100%; height: 220px; object-fit: cover; display: block;
+  width: 100%; height: 100%; object-fit: contain; display: block;
 }
 .preview-scanning {
   position: absolute; inset: 0; display: flex; flex-direction: column;
@@ -511,3 +511,52 @@ input  { font-family: var(--font); }
 /* ─── SHARED ───────────────────────────────────────────── */
 .spin { animation: rotate .8s linear infinite; }
 @keyframes rotate { to { transform: rotate(360deg); } }
+
+/* ─── AUTH PAGE (Glassmorphism) ────────────────────────── */
+.auth-container {
+  display: flex; align-items: center; justify-content: center;
+  width: 100vw; height: 100vh;
+  background: radial-gradient(circle at center, #0e1326 0%, #07090f 100%);
+  position: fixed; inset: 0; z-index: 9999;
+}
+.auth-box {
+  width: 100%; max-width: 400px; padding: 32px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  display: flex; flex-direction: column; gap: 20px;
+}
+.auth-head { text-align: center; }
+.auth-head h2 { font-size: 1.6rem; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.5px; }
+.auth-head p { font-size: 0.8rem; color: var(--muted); }
+.auth-form { display: flex; flex-direction: column; gap: 14px; }
+.auth-input-group { display: flex; flex-direction: column; gap: 6px; }
+.auth-input-group label { font-size: 0.75rem; font-weight: 600; color: var(--sub); }
+.auth-input {
+  width: 100%; padding: 10px 14px; border-radius: var(--r-sm);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); outline: none; transition: border-color var(--t);
+  font-size: 0.85rem;
+}
+.auth-input:focus { border-color: var(--accent-b); }
+.auth-toggle {
+  font-size: 0.8rem; color: var(--sub); text-align: center; cursor: pointer;
+  transition: color var(--t); margin-top: 6px;
+}
+.auth-toggle:hover { color: var(--accent); }
+.auth-error { font-size: 0.78rem; color: #ef4444; text-align: center; }
+
+/* Mic recording active animation */
+.mic-btn.recording {
+  background: #ef4444 !important;
+  color: #fff !important;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.5);
+  animation: pulse-red 1.5s infinite;
+}
+@keyframes pulse-red {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}

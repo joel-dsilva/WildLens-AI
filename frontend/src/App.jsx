@@ -3,7 +3,7 @@ import {
   Camera, UploadCloud, MessageSquare, BookOpen, BarChart2,
   Loader2, Send, ChevronRight, Zap, Globe,
   Clock, TrendingUp, X, RefreshCw, ArrowRight,
-  Activity, Microscope, Shield, Plus, Search
+  Activity, Microscope, Shield, Plus, Search, Mic
 } from 'lucide-react';
 import './App.css';
 
@@ -44,6 +44,16 @@ const confidenceColor = (c) => c >= 80 ? "#10b981" : c >= 50 ? "#f59e0b" : "#ef4
 export default function App() {
   const [tab, setTab] = useState("scanner");
 
+  // Auth state
+  const [session, setSession] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("wl_session") || "null"); } catch { return null; }
+  });
+  const [authMode, setAuthMode] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState("");
+
   // Scanner — multiple images
   const [images, setImages]         = useState([]); // [{url, file, result, ecoInfo, scanning}]
   const [activeIdx, setActiveIdx]   = useState(0);
@@ -65,13 +75,102 @@ export default function App() {
   const [input, setInput]   = useState("");
   const [chatBusy, setChatBusy] = useState(false);
 
-  // History
-  const [history, setHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("wl_hist") || "[]"); } catch { return []; }
-  });
+  // History - Scoped to user ID
+  const [history, setHistory] = useState([]);
 
-  useEffect(() => { localStorage.setItem("wl_hist", JSON.stringify(history)); }, [history]);
+  useEffect(() => {
+    if (session?.user?.id) {
+      const key = `wl_hist_${session.user.id}`;
+      try {
+        setHistory(JSON.parse(localStorage.getItem(key) || "[]"));
+      } catch {
+        setHistory([]);
+      }
+    } else {
+      setHistory([]);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      const key = `wl_hist_${session.user.id}`;
+      localStorage.setItem(key, JSON.stringify(history));
+    }
+  }, [history, session]);
+
   useEffect(() => { chatBottom.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
+
+  // Speech Recognition (Web Speech API)
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef(null);
+
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = 'en-US';
+
+      rec.onstart = () => setIsRecording(true);
+      rec.onend = () => setIsRecording(false);
+      rec.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(transcript);
+      };
+      rec.onerror = (e) => {
+        console.error("Speech Recognition Error", e);
+        setIsRecording(false);
+      };
+      recognitionRef.current = rec;
+    }
+  }, []);
+
+  const toggleRecord = () => {
+    if (!recognitionRef.current) {
+      alert("Voice recognition is not supported in your browser. Please use Google Chrome or Microsoft Edge.");
+      return;
+    }
+    if (isRecording) {
+      recognitionRef.current.stop();
+    } else {
+      recognitionRef.current.start();
+    }
+  };
+
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthError("Email and Password are required");
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError("");
+    const endpoint = authMode === "login" ? "/api/auth/login" : "/api/auth/signup";
+    const fd = new FormData();
+    fd.append("email", authEmail.trim());
+    fd.append("password", authPassword.trim());
+    try {
+      const r = await fetch(`${HOST}${endpoint}`, { method: "POST", body: fd });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || "Authentication failed");
+      if (d.success) {
+        localStorage.setItem("wl_session", JSON.stringify(d));
+        setSession(d);
+        setAuthEmail("");
+        setAuthPassword("");
+      }
+    } catch (err) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("wl_session");
+    setSession(null);
+  };
 
   // ── Camera ───────────────────────────────────────────
   const startCam = async () => {
@@ -235,6 +334,50 @@ export default function App() {
 
   const activeImage = images[activeIdx];
 
+  if (!session) {
+    return (
+      <div className="auth-container">
+        <div className="auth-box">
+          <div className="auth-head">
+            <h2>{authMode === "login" ? "Welcome to WildLens AI" : "Create Account"}</h2>
+            <p>{authMode === "login" ? "Log in to access your ecology profile & scans" : "Sign up to track and sync your findings"}</p>
+          </div>
+          <form className="auth-form" onSubmit={handleAuth}>
+            <div className="auth-input-group">
+              <label>Email Address</label>
+              <input 
+                type="email" 
+                className="auth-input" 
+                placeholder="you@example.com" 
+                value={authEmail} 
+                onChange={e => setAuthEmail(e.target.value)} 
+                required 
+              />
+            </div>
+            <div className="auth-input-group">
+              <label>Password</label>
+              <input 
+                type="password" 
+                className="auth-input" 
+                placeholder="••••••••" 
+                value={authPassword} 
+                onChange={e => setAuthPassword(e.target.value)} 
+                required 
+              />
+            </div>
+            {authError && <div className="auth-error">{authError}</div>}
+            <button type="submit" className="btn-accent" style={{width: '100%', justifyContent: 'center', marginTop: 8}} disabled={authLoading}>
+              {authLoading ? <Loader2 size={16} className="spin"/> : authMode === "login" ? "Log In" : "Sign Up"}
+            </button>
+          </form>
+          <div className="auth-toggle" onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthError(""); }}>
+            {authMode === "login" ? "Don't have an account? Sign up" : "Already have an account? Log in"}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="shell">
       {/* ── Sidebar ── */}
@@ -260,7 +403,12 @@ export default function App() {
           <div className="pills" style={{flexDirection:"column", alignItems:"flex-start", gap: 4}}>
             <span className="pill" style={{whiteSpace:"normal", textAlign:"left", lineHeight:"1.4"}}><Zap size={11}/> Fun Fact: Sloths can hold their breath longer than dolphins can.</span>
           </div>
-          <p className="footer-note">WildLens AI System</p>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8}}>
+            <p className="footer-note">WildLens AI System</p>
+            <button onClick={handleLogout} style={{background: 'none', border: 'none', color: '#ef4444', fontSize: '0.72rem', fontWeight: 600}}>
+              Log Out
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -693,6 +841,14 @@ export default function App() {
         </div>
 
         <div className="chat-bar">
+          <button 
+            className={`send-btn mic-btn ${isRecording ? 'recording' : ''}`} 
+            onClick={toggleRecord} 
+            title={isRecording ? "Listening..." : "Voice Input"}
+            style={{background: isRecording ? '#ef4444' : 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)'}}
+          >
+            <Mic size={15} />
+          </button>
           <input
             className="chat-input"
             placeholder="Ask about behavior, habitat, diet…"

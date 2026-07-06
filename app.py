@@ -309,6 +309,44 @@ def classify_image_cnn(image_bytes: bytes) -> dict:
 # 6. API Endpoints
 # ==========================================
 
+@app.post("/api/auth/signup")
+async def auth_signup(email: str = Form(...), password: str = Form(...)):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not configured.")
+    try:
+        res = supabase.auth.sign_up({"email": email, "password": password})
+        session = res.session
+        user = res.user
+        return {
+            "success": True, 
+            "user": {"id": user.id, "email": user.email}, 
+            "session": {
+                "access_token": session.access_token if session else None,
+                "refresh_token": session.refresh_token if session else None
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/api/auth/login")
+async def auth_login(email: str = Form(...), password: str = Form(...)):
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Supabase client not configured.")
+    try:
+        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        session = res.session
+        user = res.user
+        return {
+            "success": True,
+            "user": {"id": user.id, "email": user.email},
+            "session": {
+                "access_token": session.access_token if session else None,
+                "refresh_token": session.refresh_token if session else None
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.get("/api/health")
 async def health():
     return {
