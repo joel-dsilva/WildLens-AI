@@ -207,10 +207,11 @@ export default function App() {
     if (!input.trim() || chatBusy) return;
     const text = input; setInput(""); setChatBusy(true);
     setMsgs(prev => [...prev, { role:"user", text, ts:new Date() }]);
-    const activeResult = images[activeIdx]?.result;
+    const activeImage = images[activeIdx];
+    const selectedSpecies = activeImage?.result?.species_list?.[activeImage.activeEcoTab || 0] || activeImage?.result?.species || "";
     const fd = new FormData();
     fd.append("message", text);
-    fd.append("species_context", activeResult?.species || "");
+    fd.append("species_context", selectedSpecies);
     fd.append("chat_history", JSON.stringify(msgs.slice(-8)));
     try {
       const r = await fetch(`${HOST}/api/chat`, { method:"POST", body:fd });
@@ -660,11 +661,15 @@ export default function App() {
           <span className="chat-model-tag">AI Agent</span>
         </div>
 
-        {images[activeIdx]?.result?.species && tab==="scanner" && (
-          <div className="ctx-banner">
-            🎯 Context: <strong>{images[activeIdx].result.species}</strong>
-          </div>
-        )}
+        {images[activeIdx]?.result?.species && tab==="scanner" && (() => {
+          const activeImage = images[activeIdx];
+          const selectedSpecies = activeImage?.result?.species_list?.[activeImage.activeEcoTab || 0] || activeImage?.result?.species || "";
+          return (
+            <div className="ctx-banner">
+              🎯 Context: <strong>{selectedSpecies}</strong>
+            </div>
+          );
+        })()}
 
         <div className="chat-messages">
           {msgs.map((m,i) => (
