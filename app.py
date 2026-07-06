@@ -78,6 +78,9 @@ import requests
 # 4. Groq Client & API Configuration
 # ==========================================
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
+GROQ_MODEL   = "llama-3.3-70b-versatile"
+GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
+N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Using the highly capable and fast Llama-3.3-70b model
 GROQ_MODEL = "llama-3.3-70b-versatile"
@@ -119,6 +122,25 @@ def gemini_generate(prompt: str) -> str | None:
         return QUOTA_MSG
 import base64 as _b64
 import re as _re
+
+def n8n_notify(species_list: list, scan_id: str, model_used: str):
+    """Fire-and-forget: send scan result to n8n webhook for email notification."""
+    if not N8N_WEBHOOK_URL:
+        return
+    try:
+        payload = {
+            "scan_id":      scan_id,
+            "species":      species_list[0] if species_list else "Unknown",
+            "all_detected": ", ".join(species_list),
+            "model":        model_used,
+            "timestamp":    datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            "app":          "WildLens AI"
+        }
+        requests.post(N8N_WEBHOOK_URL, json=payload, timeout=5)
+        print(f"[INFO] n8n webhook triggered for: {species_list}")
+    except Exception as e:
+        print(f"[WARN] n8n webhook failed: {e}")
+
 
 def _groq_vision_call(b64_image: str, prompt: str) -> str:
     """Make a single Groq Vision API call and return raw text content."""
@@ -337,13 +359,18 @@ async def api_classify(
             "created_at":  datetime.utcnow().isoformat(),
         })
 
-        return JSONResponse(content={
+        result_payload = {
             "species": primary_species,
             "species_list": species_list,
             "confidence": confidence,
             "model_type": model_used,
             "scan_id": scan_id
-        })
+        }
+
+        # Fire-and-forget n8n notification (non-blocking)
+        n8n_notify(species_list, scan_id, model_used)
+
+        return JSONResponse(content=result_payload)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
