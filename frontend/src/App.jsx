@@ -20,7 +20,12 @@ const EMOJI_MAP = {
   Gorilla:"🦍", Panda:"🐼", Wolf:"🐺", Eagle:"🦅", Dolphin:"🐬",
   Shark:"🦈", Penguin:"🐧", Crocodile:"🐊", Kangaroo:"🦘", Koala:"🐨",
   Jaguar:"🐆", Chimpanzee:"🐒", Flamingo:"🦩", Orangutan:"🦧",
-  Platypus:"🦆", Axolotl:"🦎", Pangolin:"🐾"
+  Platypus:"🦆", Axolotl:"🦎", Pangolin:"🐾",
+  Human:"👤", Person:"👤", Man:"👤", Woman:"👤", People:"👥",
+  Bear:"🐻", Rabbit:"🐰", Deer:"🦌", Fox:"🦊", Raccoon:"🦝",
+  Leopard:"🐆", Hyena:"🐾", Hippo:"🦛", Rhino:"🦏", Camel:"🐪",
+  Parrot:"🦜", Owl:"🦉", Peacock:"🦚", Swan:"🦢", Hawk:"🦅",
+  Frog:"🐸", Snake:"🐍", Turtle:"🐢", Lizard:"🦎", Chameleon:"🦎"
 };
 const getEmoji = (name) => EMOJI_MAP[name] || "🐾";
 
@@ -388,7 +393,11 @@ export default function App() {
                                   <span className="result-emoji" style={{ fontSize: '2.5rem', marginRight: '1rem' }}>{EMOJI_MAP[activeImage.result.species] || "🐾"}</span>
                                   <div>
                                     <div className="result-lbl" style={{ fontSize: '1.2rem', fontWeight: 600, color: '#1f2937' }}>
-                                      {activeImage.result.species_list?.length > 1 ? "Multiple Animals Detected" : `It is a ${activeImage.result.species}`}
+                                      {activeImage.result.species_list?.length > 1
+                                        ? "Multiple Subjects Detected"
+                                        : activeImage.result.species?.toLowerCase().includes("human") || activeImage.result.species?.toLowerCase().includes("person")
+                                          ? `A Human Detected`
+                                          : `It is a ${activeImage.result.species}`}
                                     </div>
                                   </div>
                                 </div>

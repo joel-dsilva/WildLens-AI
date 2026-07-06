@@ -119,11 +119,11 @@ def gemini_generate(prompt: str) -> str | None:
         return QUOTA_MSG
 
 def groq_vision_detect(image_bytes: bytes) -> list:
-    """Use Groq Vision to identify all animals and humans in the image."""
+    """Use Groq Vision to identify ALL animals and humans in the image."""
     if not get_groq_configured():
         return []
     try:
-        import base64
+        import base64, re
         b64 = base64.b64encode(image_bytes).decode('utf-8')
         headers = {
             "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -136,8 +136,16 @@ def groq_vision_detect(image_bytes: bytes) -> list:
                     "role": "user",
                     "content": [
                         {
-                            "type": "text", 
-                            "text": "Identify all animal species in this image, including humans. Return a comma-separated list of the names only (e.g., 'Dog, Human, Horse'). If there are no animals or humans, return 'None'."
+                            "type": "text",
+                            "text": (
+                                "Look very carefully at every living subject in this image. "
+                                "List EVERY animal species AND every human you can see, no matter how small or in the background. "
+                                "A human is also a valid subject — if you see a person, write 'Human'. "
+                                "Respond with ONLY a comma-separated list of names, nothing else. "
+                                "Examples of correct responses: 'Cat, Lion' or 'Human, Dog' or 'Horse' or 'Cat, Human, Parrot'. "
+                                "Do NOT write sentences. Do NOT write explanations. "
+                                "If you see absolutely nothing, respond with 'None'."
+                            )
                         },
                         {
                             "type": "image_url",
@@ -148,20 +156,35 @@ def groq_vision_detect(image_bytes: bytes) -> list:
                     ]
                 }
             ],
-            "temperature": 0.1
+            "temperature": 0.0,
+            "max_tokens": 100
         }
-        resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=15)
+        resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=20)
         if resp.status_code == 200:
-            content = resp.json()["choices"][0]["message"]["content"]
-            if "none" in content.lower() and len(content) < 10: 
+            content = resp.json()["choices"][0]["message"]["content"].strip()
+            print(f"[INFO] Groq Vision raw response: '{content}'")
+
+            # Strip any leading prose (e.g. "The animals are: Cat, Lion")
+            # Find the last colon and take everything after it if it exists
+            if ":" in content:
+                content = content.split(":")[-1].strip()
+
+            # If none found
+            if content.lower() in ("none", "none.", ""):
                 return []
-            return [s.strip().title() for s in content.split(",") if s.strip()]
+
+            # Remove any stray punctuation and split on commas
+            names = [re.sub(r"[^a-zA-Z\s\-]", "", s).strip().title() for s in content.split(",")]
+            names = [n for n in names if n and len(n) > 1]
+            print(f"[INFO] Groq Vision detected: {names}")
+            return names
         else:
-            print(f"[WARN] Groq Vision failed: {resp.text}")
+            print(f"[WARN] Groq Vision failed ({resp.status_code}): {resp.text}")
             return []
     except Exception as e:
         print(f"[WARN] Groq Vision exception: {e}")
         return []
+
 
 def classify_image_gemini(image_bytes: bytes) -> dict:
     """Fallback handler to classify images."""
