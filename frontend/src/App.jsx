@@ -593,11 +593,82 @@ export default function App() {
                                 </div>
                               </div>
                             )}
+
+                            {/* Quick Summary — fills the gap below the animal name */}
+                            {activeImage.result?.confidence >= 45 && (
+                              <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+                                {/* Stat pills row */}
+                                {activeImage.ecoInfo ? (
+                                  <>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                      {activeImage.ecoInfo.conservation?.status && (
+                                        <span style={{
+                                          padding: '4px 12px', borderRadius: '20px', fontSize: '.75rem', fontWeight: 700,
+                                          border: `1.5px solid ${statusColor(activeImage.ecoInfo.conservation.status)}`,
+                                          color: statusColor(activeImage.ecoInfo.conservation.status),
+                                          background: 'rgba(255,255,255,0.03)'
+                                        }}>
+                                          🛡 {activeImage.ecoInfo.conservation.status}
+                                        </span>
+                                      )}
+                                      {activeImage.ecoInfo.food_chain?.trophic_level && (
+                                        <span style={{
+                                          padding: '4px 12px', borderRadius: '20px', fontSize: '.75rem', fontWeight: 700,
+                                          border: '1.5px solid rgba(99,102,241,0.5)', color: '#818cf8',
+                                          background: 'rgba(99,102,241,0.08)'
+                                        }}>
+                                          🍖 {activeImage.ecoInfo.food_chain.trophic_level}
+                                        </span>
+                                      )}
+                                      {activeImage.ecoInfo.habitat?.climate && (
+                                        <span style={{
+                                          padding: '4px 12px', borderRadius: '20px', fontSize: '.75rem', fontWeight: 700,
+                                          border: '1.5px solid rgba(16,185,129,0.35)', color: '#10b981',
+                                          background: 'rgba(16,185,129,0.08)'
+                                        }}>
+                                          🌍 {activeImage.ecoInfo.habitat.climate}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* Range & description */}
+                                    <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                                      {activeImage.ecoInfo.habitat?.distribution && (
+                                        <div style={{ fontSize: '.78rem', color: '#9ca3af', marginBottom: '8px' }}>
+                                          <span style={{ color: '#6b7280', fontWeight: 600, marginRight: '8px' }}>📍 Range</span>
+                                          {activeImage.ecoInfo.habitat.distribution}
+                                        </div>
+                                      )}
+                                      {activeImage.ecoInfo.habitat?.description && (
+                                        <p style={{ fontSize: '.78rem', color: '#9ca3af', lineHeight: 1.6, margin: 0 }}>
+                                          {activeImage.ecoInfo.habitat.description}
+                                        </p>
+                                      )}
+                                    </div>
+
+                                    {/* Threats quick line */}
+                                    {activeImage.ecoInfo.conservation?.threats && (
+                                      <div style={{ fontSize: '.75rem', color: '#f87171', background: 'rgba(239,68,68,0.06)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.15)' }}>
+                                        ⚠️ <strong>Key Threat:</strong> {activeImage.ecoInfo.conservation.threats}
+                                      </div>
+                                    )}
+                                  </>
+                                ) : activeImage.scanning ? null : (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {[80, 60, 90].map((w, i) => (
+                                      <div key={i} style={{ height: '14px', borderRadius: '7px', background: 'rgba(255,255,255,0.06)', width: `${w}%`, animation: 'pulse 1.5s infinite' }}/>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
                     )}
                   </div>
+
 
                   {/* Eco info section — full width below image */}
                   {activeImage.ecoInfo && typeof activeImage.ecoInfo === 'object' && !activeImage.scanning && activeImage.result?.confidence >= 45 && (
