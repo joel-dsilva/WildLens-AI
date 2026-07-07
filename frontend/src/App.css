@@ -223,7 +223,7 @@ input  { font-family: var(--font); }
 
 /* Preview row (expanded to utilize screen) */
 .preview-row {
-  display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; align-items: stretch;
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; align-items: start;
 }
 .preview-box {
   border-radius: var(--r); overflow: hidden;
@@ -282,31 +282,31 @@ input  { font-family: var(--font); }
 /* ─── CARDS ────────────────────────────────────────────── */
 .card {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 14px;
+  border-radius: var(--r); padding: 16px;
 }
 .card-head {
   display: flex; align-items: center; gap: 7px;
-  font-size: .75rem; font-weight: 700; text-transform: uppercase;
+  font-size: .84rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: .5px; color: var(--sub);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
-.kv     { display: flex; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
-.kk     { font-size: .72rem; color: var(--muted); min-width: 52px; flex-shrink: 0; }
-.kv-val { font-size: .72rem; color: var(--text); flex: 1; }
-.kdesc  { font-size: .72rem; color: var(--sub); line-height: 1.5; margin-top: 8px; }
+.kv     { display: flex; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.kk     { font-size: .78rem; color: var(--muted); min-width: 58px; flex-shrink: 0; }
+.kv-val { font-size: .78rem; color: var(--text); flex: 1; line-height: 1.4; }
+.kdesc  { font-size: .78rem; color: var(--sub); line-height: 1.6; margin-top: 10px; }
 
 .chain  { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .cnode  {
-  padding: 3px 9px; border-radius: 6px;
+  padding: 4px 10px; border-radius: 6px;
   background: var(--surface2); border: 1px solid var(--border);
-  font-size: .72rem; font-weight: 600;
+  font-size: .78rem; font-weight: 600;
 }
 .cnode-active { background: var(--accent-d); border-color: var(--accent-b); color: var(--accent); }
 .carrow { color: var(--muted); font-size: .8rem; }
 
 .iucn-badge {
-  display: inline-block; font-size: .72rem; font-weight: 700;
-  padding: 3px 10px; border-radius: 6px; border: 1.5px solid;
+  display: inline-block; font-size: .78rem; font-weight: 700;
+  padding: 4px 12px; border-radius: 6px; border: 1.5px solid;
 }
 
 .loading-row { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .8rem; }
