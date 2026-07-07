@@ -373,6 +373,8 @@ export default function App() {
               style={{width: '100%', justifyContent: 'center', background: 'rgba(255,255,255,0.02)', borderColor: 'rgba(255,255,255,0.08)'}}
               onClick={() => {
                 const guestSession = { user: { id: "guest", email: "guest@wildlens.ai" }, success: true };
+                localStorage.removeItem("wl_hist_guest");
+                setHistory([]);
                 localStorage.setItem("wl_session", JSON.stringify(guestSession));
                 setSession(guestSession);
               }}
