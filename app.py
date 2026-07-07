@@ -728,6 +728,17 @@ if os.path.exists(dist_path):
     if os.path.exists(assets_path):
         app.mount("/assets", StaticFiles(directory=assets_path), name="assets")
 
+    @app.get("/logo.svg")
+    async def serve_logo():
+        logo = os.path.join(dist_path, "logo.svg")
+        if os.path.exists(logo):
+            return FileResponse(logo, media_type="image/svg+xml")
+        # Try checking public folder just in case
+        pub_logo = os.path.join("frontend", "public", "logo.svg")
+        if os.path.exists(pub_logo):
+            return FileResponse(pub_logo, media_type="image/svg+xml")
+        return HTMLResponse("Not found", status_code=404)
+
     @app.get("/", response_class=HTMLResponse)
     async def serve_index():
         index = os.path.join(dist_path, "index.html")
