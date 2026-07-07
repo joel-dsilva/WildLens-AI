@@ -168,6 +168,9 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem("wl_session");
     setSession(null);
+    setImages([]);
+    setActiveIdx(0);
+    setMsgs([{ role:"bot", text:"Hi! I'm WildLens AI 🌿 Upload an animal photo or ask me anything about wildlife.", ts: new Date() }]);
   };
 
   // ── Camera ───────────────────────────────────────────
