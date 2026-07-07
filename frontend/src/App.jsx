@@ -45,9 +45,7 @@ export default function App() {
   const [tab, setTab] = useState("scanner");
 
   // Auth state
-  const [session, setSession] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("wl_session") || "null"); } catch { return null; }
-  });
+  const [session, setSession] = useState(null);
   const [authMode, setAuthMode] = useState("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
