@@ -446,13 +446,17 @@ async def api_info(species: str = Form(...)):
 
     try:
         schema = (
-            '{"habitat":{"climate":"str","distribution":"str","description":"str"},'
+            '{"overview":"2-3 sentence Pokedex-style summary of the animal",'
+            '"fun_fact":"one surprising fun fact about the animal",'
+            '"habitat":{"climate":"str","distribution":"str","description":"str"},'
             '"food_chain":{"trophic_level":"str","chain":["str"],"description":"str"},'
             '"conservation":{"status":"str","threats":"str","actions":"str"}}'
         )
         prompt = (
             f"Return structured JSON (no markdown) for the animal '{species}' "
-            f"matching this exact schema: {schema}. Be factual and concise."
+            f"matching this exact schema: {schema}. Be factual and concise. "
+            f"The overview should be 2-3 engaging sentences like a wildlife encyclopedia entry. "
+            f"The fun_fact should be one surprising, specific fact."
         )
         raw_text = gemini_generate(prompt)
         if not raw_text or raw_text == QUOTA_MSG:

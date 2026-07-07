@@ -395,7 +395,9 @@ export default function App() {
       {/* ── Sidebar ── */}
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-icon"><Activity size={19} strokeWidth={2.5}/></div>
+          <div className="brand-icon" style={{ background: 'none', boxShadow: 'none' }}>
+            <img src="/logo.svg" alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          </div>
           <div>
             <div className="brand-name">WildLens AI</div>
             <div className="brand-tag">Ecology Intelligence</div>
@@ -597,6 +599,23 @@ export default function App() {
                             {/* Quick Summary — fills the gap below the animal name */}
                             {activeImage.result?.confidence >= 45 && (
                               <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+                                {/* Pokedex-style Overview description */}
+                                {activeImage.ecoInfo?.overview && (
+                                  <div style={{
+                                    fontSize: '0.82rem',
+                                    lineHeight: '1.6',
+                                    color: 'var(--sub)',
+                                    background: 'rgba(255,255,255,0.02)',
+                                    padding: '12px 14px',
+                                    borderRadius: '10px',
+                                    border: '1px solid rgba(255,255,255,0.06)',
+                                    fontStyle: 'italic',
+                                    borderLeft: '3px solid var(--accent)'
+                                  }}>
+                                    "{activeImage.ecoInfo.overview}"
+                                  </div>
+                                )}
 
                                 {/* Stat pills row */}
                                 {activeImage.ecoInfo ? (
