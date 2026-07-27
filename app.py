@@ -158,7 +158,7 @@ def _groq_vision_call(b64_image: str, prompt: str) -> str:
             ]
         }],
         "temperature": 0.0,
-        "max_tokens": 150
+        "max_tokens": 250
     }
     resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=25)
     if resp.status_code == 200:
@@ -167,49 +167,44 @@ def _groq_vision_call(b64_image: str, prompt: str) -> str:
         print(f"[WARN] Groq Vision API error ({resp.status_code}): {resp.text[:300]}")
         return ""
 
-def _parse_vision_text(content: str) -> list:
-    """Parse a vision response into a clean list of names (no sentences)."""
-    if not content:
-        return []
-    
-    # Replace common formatting/newlines with commas
-    content_clean = content.replace("\n", ", ")
-    parts = content_clean.split(",")
+# Master list of known animal keywords to scan for in the vision response
+KNOWN_ANIMALS = [
+    "liger", "tigon", "lion", "tiger", "cheetah", "leopard", "jaguar", "panther",
+    "dog", "cat", "horse", "elephant", "butterfly", "chicken", "cow", "sheep",
+    "squirrel", "spider", "giraffe", "zebra", "gorilla", "panda", "wolf", "eagle",
+    "dolphin", "shark", "penguin", "crocodile", "kangaroo", "koala", "chimpanzee",
+    "flamingo", "orangutan", "platypus", "axolotl", "pangolin", "bear", "rabbit",
+    "deer", "fox", "raccoon", "hyena", "hippo", "rhino", "camel", "parrot", "owl",
+    "peacock", "swan", "hawk", "frog", "snake", "turtle", "lizard", "chameleon",
+    "monkey", "baboon", "seal", "walrus", "otter", "beaver", "porcupine", "hedgehog",
+    "bat", "mole", "rat", "mouse", "hamster", "guinea pig", "ferret", "skunk",
+    "opossum", "armadillo", "anteater", "sloth", "lemur", "lynx", "bobcat", "cougar",
+    "moose", "elk", "bison", "buffalo", "yak", "llama", "alpaca", "donkey", "mule",
+    "goat", "pig", "boar", "warthog", "meerkat", "mongoose", "genet", "civet",
+    "hummingbird", "toucan", "macaw", "cockatoo", "pelican", "stork", "heron",
+    "albatross", "condor", "vulture", "raven", "crow", "sparrow", "finch", "robin",
+    "ostrich", "emu", "kiwi", "puffin", "ibis", "woodpecker", "kingfisher",
+    "salamander", "newt", "gecko", "iguana", "monitor", "komodo", "alligator",
+    "python", "cobra", "viper", "boa", "mamba", "anaconda",
+    "goldfish", "clownfish", "salmon", "tuna", "whale", "orca", "porpoise", "ray",
+    "octopus", "squid", "jellyfish", "crab", "lobster", "shrimp", "starfish",
+    "scorpion", "beetle", "moth", "bee", "wasp", "ant", "dragonfly", "firefly",
+]
+
+def _scan_for_subjects(text: str) -> list:
+    """Scan raw vision text for known animal/human keywords and return clean names."""
+    lower = text.lower()
     results = []
-    
-    # Common conversational words to exclude
-    stop_words = {"this", "is", "a", "an", "the", "are", "shows", "contains", "image", "picture", "photo", "living", "creature", "subject", "there", "in", "to"}
-    
-    for p in parts:
-        # Strip markdown symbols
-        p = p.strip().strip(".*`\"'").strip()
-        if not p:
-            continue
-        words = p.split()
-        if len(words) > 3:
-            # Skip long descriptive sentences
-            continue
-        # Strip stop words and non-alpha characters
-        cleaned_words = [w for w in words if w.lower() not in stop_words]
-        cleaned = " ".join(cleaned_words)
-        cleaned = _re.sub(r"[^a-zA-Z\s\-]", "", cleaned).strip().title()
-        if cleaned and len(cleaned) > 1 and cleaned.lower() not in ("none", "null", "unknown"):
-            results.append(cleaned)
-            
-    # Fallback keyword scanning if Qwen outputted a conversational paragraph
-    lower_content = content.lower()
-    if not results:
-        if "human" in lower_content or "person" in lower_content or "people" in lower_content:
-            results.append("Human")
-        if "liger" in lower_content:
-            results.append("Liger")
-        elif "tigon" in lower_content:
-            results.append("Tigon")
-        elif "lion" in lower_content:
-            results.append("Lion")
-        elif "tiger" in lower_content:
-            results.append("Tiger")
-            
+
+    # Always check for human first
+    if any(w in lower for w in ["human", "person", "woman", "man", "people", "girl", "boy", "lady", "gentleman"]):
+        results.append("Human")
+
+    # Scan for animals
+    for animal in KNOWN_ANIMALS:
+        if animal in lower:
+            results.append(animal.title())
+
     # Deduplicate keeping order
     seen = set()
     deduped = []
@@ -220,33 +215,22 @@ def _parse_vision_text(content: str) -> list:
     return deduped
 
 def groq_vision_detect(image_bytes: bytes) -> list:
-    """Use Groq Vision to identify ALL animals and humans in the image (two-pass)."""
+    """Use Groq Vision to identify ALL animals and humans in the image."""
     if not get_groq_configured():
         return []
     try:
         b64 = _b64.b64encode(image_bytes).decode("utf-8")
 
-        # === PASS 1: General subject detection ===
-        prompt1 = (
-            "Examine this image carefully. Identify all animals and humans/people in the image. "
-            "Reply with a list of detected names separated by commas (for example: Human, Liger). "
-            "Only output the names. Do not write sentences, descriptions, or observations."
+        prompt = (
+            "Look carefully at this image and describe every living subject you can see. "
+            "Mention all animal species by name (e.g. liger, lion, tiger, dog) and note if any humans/people are present. "
+            "Be thorough. List all the animals and any humans you can see."
         )
-        raw1 = _groq_vision_call(b64, prompt1)
-        print(f"[INFO] Groq Vision Pass 1 raw: '{raw1}'")
-        
-        results = _parse_vision_text(raw1)
-        print(f"[INFO] Groq Vision Pass 1 parsed: {results}")
+        raw = _groq_vision_call(b64, prompt)
+        print(f"[INFO] Groq Vision raw: '{raw}'")
 
-        # === PASS 2: Human-specific check (if Pass 1 returned nothing) ===
-        if not results:
-            prompt2 = "Does this image contain a human being or a person? Answer with only 'Yes' or 'No'."
-            raw2 = _groq_vision_call(b64, prompt2)
-            print(f"[INFO] Groq Vision Pass 2 (human check) raw: '{raw2}'")
-            if raw2.strip().lower().startswith("yes") or "yes" in raw2.lower():
-                results = ["Human"]
-                print("[INFO] Groq Vision Pass 2: Human detected")
-
+        results = _scan_for_subjects(raw)
+        print(f"[INFO] Groq Vision detected: {results}")
         return results
 
     except Exception as e:
