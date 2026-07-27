@@ -149,7 +149,7 @@ def _groq_vision_call(b64_image: str, prompt: str) -> str:
         "Content-Type": "application/json"
     }
     payload = {
-        "model": "llama-3.2-11b-vision-preview",
+        "model": "qwen/qwen3.6-27b",
         "messages": [{
             "role": "user",
             "content": [
@@ -719,16 +719,6 @@ async def api_analytics():
             print(f"Analytics fetch error: {e}")
     return JSONResponse(content=stats)
 
-@app.get("/api/models")
-async def api_models():
-    if not GROQ_API_KEY:
-        return {"error": "Groq API key not set"}
-    try:
-        headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
-        resp = requests.get("https://api.groq.com/openai/v1/models", headers=headers, timeout=10)
-        return JSONResponse(content=resp.json())
-    except Exception as e:
-        return {"error": str(e)}
 
 # ==========================================
 # 7. Serve React Frontend (production build)
