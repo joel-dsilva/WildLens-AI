@@ -558,7 +558,7 @@ export default function App() {
                                 <div style={{display: 'flex', alignItems: 'center'}}>
                                   <span className="result-emoji" style={{ fontSize: '2.5rem', marginRight: '1rem' }}>{EMOJI_MAP[activeImage.result.species] || "🐾"}</span>
                                   <div>
-                                    <div className="result-lbl" style={{ fontSize: '1.2rem', fontWeight: 600, color: '#1f2937' }}>
+                                    <div className="result-lbl" style={{ fontSize: '1.2rem', fontWeight: 600, color: '#f3f4f6' }}>
                                       {activeImage.result.species_list?.length > 1
                                         ? "Multiple Subjects Detected"
                                         : activeImage.result.species?.toLowerCase().includes("human") || activeImage.result.species?.toLowerCase().includes("person")
@@ -592,7 +592,7 @@ export default function App() {
                               <div className="result-top" style={{ alignItems: 'center' }}>
                                 <span className="result-emoji" style={{ fontSize: '2.5rem', marginRight: '1rem' }}>🤔</span>
                                 <div>
-                                  <div className="result-lbl" style={{ fontSize: '1.1rem', fontWeight: 500, color: '#4b5563', lineHeight: '1.5' }}>
+                                  <div className="result-lbl" style={{ fontSize: '1.1rem', fontWeight: 500, color: '#e5e7eb', lineHeight: '1.5' }}>
                                     I am unsure what this is.<br/>Try asking the AI Agent for help.
                                   </div>
                                 </div>
@@ -658,7 +658,7 @@ export default function App() {
                                     <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
                                       {activeImage.ecoInfo.habitat?.distribution && (
                                         <div style={{ fontSize: '.78rem', color: '#9ca3af', marginBottom: '8px' }}>
-                                          <span style={{ color: '#6b7280', fontWeight: 600, marginRight: '8px' }}>📍 Range</span>
+                                          <span style={{ color: '#9ca3af', fontWeight: 600, marginRight: '8px' }}>📍 Range</span>
                                           {activeImage.ecoInfo.habitat.distribution}
                                         </div>
                                       )}

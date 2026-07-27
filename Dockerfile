@@ -1,21 +1,19 @@
-# Use official Python runtime as a parent image
+# Stage 1: Build the React frontend
+FROM node:18-alpine AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Run the FastAPI backend
 FROM python:3.11-slim
-
-# Set the working directory
 WORKDIR /app
-
-# Copy requirements
 COPY requirements.txt .
-
-# Install Python dependencies
-# We use the CPU-only version of torch to keep the image size small for the free tier
 RUN pip install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
-
-# Copy the rest of the application
 COPY . .
+# Overwrite the checked-in dist directory with the freshly built one from Stage 1
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Expose port
 EXPOSE 8000
-
-# Run the application
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

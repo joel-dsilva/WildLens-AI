@@ -142,7 +142,7 @@ def n8n_notify(species_list: list, scan_id: str, model_used: str):
         print(f"[WARN] n8n webhook failed: {e}")
 
 
-def _groq_vision_call(b64_image: str, prompt: str) -> str:
+def _groq_vision_call(b64_image: str, prompt: str, json_mode: bool = False) -> str:
     """Make a single Groq Vision API call and return raw text content."""
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -160,27 +160,14 @@ def _groq_vision_call(b64_image: str, prompt: str) -> str:
         "temperature": 0.0,
         "max_tokens": 150
     }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
     resp = requests.post(GROQ_URL, headers=headers, json=payload, timeout=25)
     if resp.status_code == 200:
         return resp.json()["choices"][0]["message"]["content"].strip()
     else:
         print(f"[WARN] Groq Vision API error ({resp.status_code}): {resp.text[:300]}")
         return ""
-
-def _parse_vision_response(content: str) -> list:
-    """Parse a vision response into a clean list of names."""
-    if not content:
-        return []
-    # Strip any leading prose like "The animals are: Cat, Lion"
-    if ":" in content:
-        content = content.split(":")[-1].strip()
-    # Reject "none" responses
-    if content.lower().strip(" .") in ("none", ""):
-        return []
-    # Split on commas, clean up each entry
-    names = [_re.sub(r"[^a-zA-Z\s\-]", "", s).strip().title() for s in content.split(",")]
-    names = [n for n in names if n and len(n) > 1]
-    return names
 
 def groq_vision_detect(image_bytes: bytes) -> list:
     """Use Groq Vision to identify ALL animals and humans in the image (two-pass)."""
@@ -191,26 +178,44 @@ def groq_vision_detect(image_bytes: bytes) -> list:
 
         # === PASS 1: General subject detection ===
         prompt1 = (
-            "Examine this image carefully. "
-            "List every living creature you can identify, including any humans/people. "
-            "Reply with ONLY a comma-separated list of names. "
-            "If you see a person or human being, write 'Human' in the list. "
-            "Examples: 'Cat, Liger' or 'Human, Dog' or 'Lion' or 'Human'. "
-            "Do NOT write any sentences or explanations. Just the names."
+            "Examine this image carefully. Identify all animals and humans/people in the image. "
+            "Output a JSON object containing a 'subjects' key, which is a list of detected animal or human names. "
+            "Keep the names simple and concise (e.g. 'Human', 'Liger', 'Dog'). "
+            "Strictly do not include sentences, descriptions, or observations. "
+            "Example output: {\"subjects\": [\"Human\", \"Liger\"]}"
         )
-        raw1 = _groq_vision_call(b64, prompt1)
+        raw1 = _groq_vision_call(b64, prompt1, json_mode=True)
         print(f"[INFO] Groq Vision Pass 1 raw: '{raw1}'")
-        results = _parse_vision_response(raw1)
+        
+        results = []
+        if raw1:
+            try:
+                data = json.loads(raw1)
+                results = [str(item).strip().title() for item in data.get("subjects", []) if item]
+            except Exception as e:
+                print(f"[WARN] JSON parsing failed for Pass 1: {e}")
+
+        # Filter results to exclude anything that is not a short name (maximum 3 words)
+        results = [r for r in results if len(r.split()) <= 3 and r.lower() not in ("none", "null")]
         print(f"[INFO] Groq Vision Pass 1 parsed: {results}")
 
         # === PASS 2: Human-specific check (if Pass 1 returned nothing) ===
         if not results:
-            prompt2 = "Does this image contain a human being or a person? Answer with only 'Yes' or 'No'."
-            raw2 = _groq_vision_call(b64, prompt2)
+            prompt2 = (
+                "Does this image contain a human being or a person? "
+                "Output a JSON object with a single boolean key 'contains_human'. "
+                "Example: {\"contains_human\": true}"
+            )
+            raw2 = _groq_vision_call(b64, prompt2, json_mode=True)
             print(f"[INFO] Groq Vision Pass 2 (human check) raw: '{raw2}'")
-            if raw2.strip().lower().startswith("yes"):
-                results = ["Human"]
-                print("[INFO] Groq Vision Pass 2: Human detected")
+            if raw2:
+                try:
+                    data = json.loads(raw2)
+                    if data.get("contains_human") is True:
+                        results = ["Human"]
+                        print("[INFO] Groq Vision Pass 2: Human detected")
+                except Exception as e:
+                    print(f"[WARN] JSON parsing failed for Pass 2: {e}")
 
         return results
 
