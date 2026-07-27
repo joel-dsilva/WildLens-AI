@@ -192,18 +192,31 @@ KNOWN_ANIMALS = [
 ]
 
 def _scan_for_subjects(text: str) -> list:
-    """Scan raw vision text for known animal/human keywords and return clean names."""
+    """Scan raw vision text for known animal/human keywords using word boundaries."""
     lower = text.lower()
     results = []
 
-    # Always check for human first
-    if any(w in lower for w in ["human", "person", "woman", "man", "people", "girl", "boy", "lady", "gentleman"]):
+    # Always check for human first using word boundaries
+    human_words = ["human", "person", "woman", "man", "people", "girl", "boy", "lady", "gentleman"]
+    if any(_re.search(r'\b' + _re.escape(w) + r'\b', lower) for w in human_words):
         results.append("Human")
 
-    # Scan for animals
+    # Scan for animals using strict word boundaries to avoid matching substrings (e.g. 'board' -> 'boa'/'boar', 'beard' -> 'bear', 'plants' -> 'ant')
+    matched_animals = []
     for animal in KNOWN_ANIMALS:
-        if animal in lower:
-            results.append(animal.title())
+        if _re.search(r'\b' + _re.escape(animal) + r'\b', lower):
+            matched_animals.append(animal)
+
+    # Hybrid & parent species cleanup (if Liger is detected, remove parent lion/tiger/cat/tigon)
+    if "liger" in matched_animals:
+        matched_animals = [a for a in matched_animals if a not in ("lion", "tiger", "cat", "tigon")]
+        matched_animals.insert(0, "liger")
+    elif "tigon" in matched_animals:
+        matched_animals = [a for a in matched_animals if a not in ("lion", "tiger", "cat")]
+        matched_animals.insert(0, "tigon")
+
+    for animal in matched_animals:
+        results.append(animal.title())
 
     # Deduplicate keeping order
     seen = set()
