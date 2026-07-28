@@ -69,9 +69,14 @@ export default function App() {
 
   // Chat (right sidebar)
   const chatBottom = useRef(null);
-  const [msgs, setMsgs]     = useState([{ role:"bot", text:"Hi! I'm WildLens AI 🌿 Upload an animal photo or ask me anything about wildlife.", ts: new Date() }]);
+  const DEFAULT_CHAT_MSG = [{ role:"bot", text:"Hi! I'm WildLens AI 🌿 Upload an animal photo or ask me anything about wildlife.", ts: new Date() }];
+  const [globalMsgs, setGlobalMsgs] = useState(DEFAULT_CHAT_MSG);
   const [input, setInput]   = useState("");
   const [chatBusy, setChatBusy] = useState(false);
+  const [histModal, setHistModal] = useState(null);
+
+  const activeImage = images[activeIdx];
+  const activeChatMsgs = activeImage?.chatMsgs || globalMsgs;
 
   // History - Scoped to user ID
   const [history, setHistory] = useState([]);
@@ -96,7 +101,7 @@ export default function App() {
     }
   }, [history, session]);
 
-  useEffect(() => { chatBottom.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs]);
+  useEffect(() => { chatBottom.current?.scrollIntoView({ behavior:"smooth" }); }, [activeChatMsgs]);
 
   // Speech Recognition (Web Speech API)
   const [isRecording, setIsRecording] = useState(false);
@@ -200,7 +205,14 @@ export default function App() {
   const addImages = (files) => {
     const valid = Array.from(files).filter(f => f.type.startsWith("image/"));
     if (!valid.length) return;
-    const newEntries = valid.map(f => ({ url: URL.createObjectURL(f), file: f, result: null, ecoInfo: null, scanning: false }));
+    const newEntries = valid.map(f => ({
+      url: URL.createObjectURL(f),
+      file: f,
+      result: null,
+      ecoInfo: null,
+      scanning: false,
+      chatMsgs: [{ role:"bot", text:"Hi! I'm WildLens AI 🌿 Upload an animal photo or ask me anything about wildlife.", ts: new Date() }]
+    }));
     setImages(prev => {
       const updated = [...prev, ...newEntries];
       const startIdx = prev.length;
@@ -306,19 +318,49 @@ export default function App() {
   const sendMsg = async () => {
     if (!input.trim() || chatBusy) return;
     const text = input; setInput(""); setChatBusy(true);
-    setMsgs(prev => [...prev, { role:"user", text, ts:new Date() }]);
-    const activeImage = images[activeIdx];
+    const userMsg = { role:"user", text, ts:new Date() };
+    const baseHistory = activeImage ? (activeImage.chatMsgs || DEFAULT_CHAT_MSG) : globalMsgs;
+    const updatedHistory = [...baseHistory, userMsg];
+
+    if (activeImage) {
+      setImages(prev => {
+        const u = [...prev];
+        if (u[activeIdx]) u[activeIdx] = { ...u[activeIdx], chatMsgs: updatedHistory };
+        return u;
+      });
+    } else {
+      setGlobalMsgs(updatedHistory);
+    }
+
     const selectedSpecies = activeImage?.result?.species_list?.[activeImage.activeEcoTab || 0] || activeImage?.result?.species || "";
     const fd = new FormData();
     fd.append("message", text);
     fd.append("species_context", selectedSpecies);
-    fd.append("chat_history", JSON.stringify(msgs.slice(-8)));
+    fd.append("chat_history", JSON.stringify(updatedHistory.slice(-8)));
     try {
       const r = await fetch(`${HOST}/api/chat`, { method:"POST", body:fd });
       const d = await r.json();
-      setMsgs(prev => [...prev, { role:"bot", text: d.response, ts:new Date() }]);
+      const botMsg = { role:"bot", text: d.response, ts:new Date() };
+      if (activeImage) {
+        setImages(prev => {
+          const u = [...prev];
+          if (u[activeIdx]) u[activeIdx] = { ...u[activeIdx], chatMsgs: [...(u[activeIdx].chatMsgs || updatedHistory), botMsg] };
+          return u;
+        });
+      } else {
+        setGlobalMsgs(prev => [...prev, botMsg]);
+      }
     } catch {
-      setMsgs(prev => [...prev, { role:"bot", text:"Connection error. Please check if the server is running.", ts:new Date() }]);
+      const errMsg = { role:"bot", text:"Connection error. Please check if the server is running.", ts:new Date() };
+      if (activeImage) {
+        setImages(prev => {
+          const u = [...prev];
+          if (u[activeIdx]) u[activeIdx] = { ...u[activeIdx], chatMsgs: [...(u[activeIdx].chatMsgs || updatedHistory), errMsg] };
+          return u;
+        });
+      } else {
+        setGlobalMsgs(prev => [...prev, errMsg]);
+      }
     } finally { setChatBusy(false); }
   };
 
@@ -881,7 +923,7 @@ export default function App() {
                     </div>
                     <div className="hist-list">
                       {history.map(s => (
-                        <div key={s.id} className="hist-item">
+                        <div key={s.id} className="hist-item" onClick={() => setHistModal(s)}>
                           <img src={s.img} alt={s.species} className="hist-thumb"/>
                           <div className="hist-info">
                             <div className="hist-species">{EMOJI_MAP[s.species]||"🐾"} {s.species}</div>
@@ -925,7 +967,7 @@ export default function App() {
         })()}
 
         <div className="chat-messages">
-          {msgs.map((m,i) => (
+          {activeChatMsgs.map((m,i) => (
             <div key={i} className={`bubble-row ${m.role}`}>
               <div className="avatar">{m.role==="bot"?"🤖":"👤"}</div>
               <div className="bubble-body">
@@ -966,6 +1008,28 @@ export default function App() {
           </button>
         </div>
       </aside>
+
+      {/* ── Scan History Lightbox Modal ── */}
+      {histModal && (
+        <div className="modal-backdrop" onClick={() => setHistModal(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setHistModal(null)}><X size={18}/></button>
+            <div className="modal-img-wrap">
+              <img src={histModal.img} alt={histModal.species} className="modal-img"/>
+            </div>
+            <div className="modal-details">
+              <h3>{EMOJI_MAP[histModal.species] || "🐾"} {histModal.species}</h3>
+              <div className="modal-meta">
+                <span style={{ color: confidenceColor(histModal.confidence), fontWeight: 700 }}>
+                  {histModal.confidence}% Confidence
+                </span>
+                <span>·</span>
+                <span>Scanned on {new Date(histModal.ts).toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
