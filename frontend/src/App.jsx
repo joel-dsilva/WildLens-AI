@@ -175,7 +175,7 @@ export default function App() {
     setSession(null);
     setImages([]);
     setActiveIdx(0);
-    setMsgs([{ role:"bot", text:"Hi! I'm WildLens AI 🌿 Upload an animal photo or ask me anything about wildlife.", ts: new Date() }]);
+    setGlobalMsgs(DEFAULT_CHAT_MSG);
   };
 
   // ── Camera ───────────────────────────────────────────
@@ -317,34 +317,38 @@ export default function App() {
   // ── Chat ──────────────────────────────────────────────
   const sendMsg = async () => {
     if (!input.trim() || chatBusy) return;
-    const text = input; setInput(""); setChatBusy(true);
-    const userMsg = { role:"user", text, ts:new Date() };
-    const baseHistory = activeImage ? (activeImage.chatMsgs || DEFAULT_CHAT_MSG) : globalMsgs;
-    const updatedHistory = [...baseHistory, userMsg];
+    const text = input;
+    const snapIdx = activeIdx;          // capture idx at call time
+    const snapImg = images[snapIdx];    // capture image snapshot
+    setInput(""); setChatBusy(true);
 
-    if (activeImage) {
+    const userMsg = { role:"user", text, ts:new Date() };
+
+    // Append user message to the correct chat
+    if (snapImg) {
       setImages(prev => {
         const u = [...prev];
-        if (u[activeIdx]) u[activeIdx] = { ...u[activeIdx], chatMsgs: updatedHistory };
+        if (u[snapIdx]) u[snapIdx] = { ...u[snapIdx], chatMsgs: [...(u[snapIdx].chatMsgs || DEFAULT_CHAT_MSG), userMsg] };
         return u;
       });
     } else {
-      setGlobalMsgs(updatedHistory);
+      setGlobalMsgs(prev => [...prev, userMsg]);
     }
 
-    const selectedSpecies = activeImage?.result?.species_list?.[activeImage.activeEcoTab || 0] || activeImage?.result?.species || "";
+    const selectedSpecies = snapImg?.result?.species_list?.[snapImg.activeEcoTab || 0] || snapImg?.result?.species || "";
+    const chatHistorySnapshot = snapImg ? (snapImg.chatMsgs || DEFAULT_CHAT_MSG) : globalMsgs;
     const fd = new FormData();
     fd.append("message", text);
     fd.append("species_context", selectedSpecies);
-    fd.append("chat_history", JSON.stringify(updatedHistory.slice(-8)));
+    fd.append("chat_history", JSON.stringify([...chatHistorySnapshot, userMsg].slice(-8)));
     try {
       const r = await fetch(`${HOST}/api/chat`, { method:"POST", body:fd });
       const d = await r.json();
       const botMsg = { role:"bot", text: d.response, ts:new Date() };
-      if (activeImage) {
+      if (snapImg) {
         setImages(prev => {
           const u = [...prev];
-          if (u[activeIdx]) u[activeIdx] = { ...u[activeIdx], chatMsgs: [...(u[activeIdx].chatMsgs || updatedHistory), botMsg] };
+          if (u[snapIdx]) u[snapIdx] = { ...u[snapIdx], chatMsgs: [...(u[snapIdx].chatMsgs || []), botMsg] };
           return u;
         });
       } else {
@@ -352,10 +356,10 @@ export default function App() {
       }
     } catch {
       const errMsg = { role:"bot", text:"Connection error. Please check if the server is running.", ts:new Date() };
-      if (activeImage) {
+      if (snapImg) {
         setImages(prev => {
           const u = [...prev];
-          if (u[activeIdx]) u[activeIdx] = { ...u[activeIdx], chatMsgs: [...(u[activeIdx].chatMsgs || updatedHistory), errMsg] };
+          if (u[snapIdx]) u[snapIdx] = { ...u[snapIdx], chatMsgs: [...(u[snapIdx].chatMsgs || []), errMsg] };
           return u;
         });
       } else {
@@ -374,8 +378,6 @@ export default function App() {
     { id:"encyclopedia",label:"Encyclopedia",      icon:<BookOpen size={17}/> },
     { id:"history",     label:"Scan History",      icon:<BarChart2 size={17}/> },
   ];
-
-  const activeImage = images[activeIdx];
 
   if (!session) {
     return (
