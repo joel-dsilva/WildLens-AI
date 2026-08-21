@@ -77,13 +77,10 @@ import requests
 # ==========================================
 # 4. Groq Client & API Configuration
 # ==========================================
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
-GROQ_MODEL   = "llama-3.3-70b-versatile"
-GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_API_KEY    = os.environ.get("GROQ_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
+GROQ_MODEL      = "openai/gpt-oss-120b"   # Active Groq text model (Aug 2026)
+GROQ_URL        = "https://api.groq.com/openai/v1/chat/completions"
 N8N_WEBHOOK_URL = os.environ.get("N8N_WEBHOOK_URL", "")
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-# Using the highly capable and fast Llama-3.3-70b model
-GROQ_MODEL = "llama-3.3-70b-versatile"
 
 QUOTA_MSG = "The AI assistant is currently busy. Please wait a moment and try again."
 
