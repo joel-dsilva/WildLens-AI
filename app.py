@@ -752,6 +752,17 @@ async def api_analytics():
     return JSONResponse(content=stats)
 
 
+@app.get("/api/models")
+async def api_models():
+    if not GROQ_API_KEY:
+        return {"error": "Groq API key not set"}
+    try:
+        headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+        resp = requests.get("https://api.groq.com/openai/v1/models", headers=headers, timeout=10)
+        return JSONResponse(content=resp.json())
+    except Exception as e:
+        return {"error": str(e)}
+
 # ==========================================
 # 7. Serve React Frontend (production build)
 # ==========================================
